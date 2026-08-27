@@ -1,50 +1,68 @@
 # Pryzael
 
-WebChatGPT-oriented engineering skill materials adapted from selected skills in Cursor's `pstack` plugin.
+Portable engineering skills for ChatGPT and other Agent Skills-compatible clients, adapted from selected `pstack` skills.
 
-This repository is intentionally a first-pass source pack. The skills are written as model-readable operating instructions rather than Cursor-specific executable plugins, so they can be refined later for the exact WebChatGPT skill/plugin surface.
+Pryzael is a source-of-truth repository. A GitHub repository is not itself a ChatGPT skill registry. Each directory under `skills/` is an independent Agent Skills package whose runtime manifest is its own `SKILL.md`.
 
-## Included skills
+## Skills
 
-- `architect` — settle caller usage, data shapes, interfaces, and module boundaries before implementation.
-- `blast-radius` — trace non-obvious downstream breakage and prove the safety assumptions a change depends on.
-- `figure-it-out` — design an auditable workflow for large or unusual work before executing it.
-- `show-me-your-work` — maintain a compact decision/evidence/result trail for work reviewed after the fact.
-- `interrogate` — perform adversarial review and synthesize findings rather than blindly applying them.
-- `fix-root-causes` — reproduce, instrument, and repair the underlying cause instead of suppressing symptoms.
-- `sequence-verifiable-units` — split multi-step work into independently checkable units and verify each before advancing.
-- `prove-it-works` — require direct evidence from the real artifact before declaring work complete.
+- `architect` — settle caller usage, data shapes, invariants, interfaces, and ownership before implementation.
+- `blast-radius` — find non-obvious downstream breakage and prove the safety assumptions a change depends on.
+- `figure-it-out` — orchestrate large, cross-cutting, unusual, or multi-phase work around falsifiable completion criteria.
+- `show-me-your-work` — keep an auditable decision/evidence/result trail for handoffs and long work.
+- `interrogate` — adversarially review a diff, PR, exact commit, or design and separate real findings from noise.
+- `fix-root-causes` — reproduce failures, trace violated invariants, and repair the defect class rather than one symptom.
+- `sequence-verifiable-units` — split multi-step work into independently checkable transitions and verify before advancing.
+- `prove-it-works` — verify completion claims against the exact artifact and strongest available real behavior path.
 
-## WebChatGPT adaptation rules
+## Runtime model
 
-The source pstack skills assume Cursor-specific facilities such as slash skills, `Task` subagents, worktrees, local transcript directories, model slug configuration, and Cursor Automations. Pryzael does not assume those facilities.
-
-Each skill instead follows these rules:
-
-1. Use connected sources and tools that are actually available in the current ChatGPT session.
-2. Never invent a tool, subagent, filesystem path, transcript, model, or execution result.
-3. If direct execution is unavailable, downgrade the verification level explicitly rather than pretending the task was run.
-4. Prefer GitHub/file citations and concrete artifacts over unsupported narrative claims.
-5. Treat `VERIFIED`, `NOT VERIFIED`, and `INCONCLUSIVE` as distinct outcomes.
-6. Keep reversible investigation moving without unnecessary questions, but do not invent product requirements or irreversible authorization.
-7. When another Pryzael skill is available, compose by name rather than duplicating its full procedure.
-
-## Suggested layout
+Pryzael follows the Agent Skills open format:
 
 ```text
-skills/
-  architect/SKILL.md
-  blast-radius/SKILL.md
-  figure-it-out/SKILL.md
-  show-me-your-work/SKILL.md
-  interrogate/SKILL.md
-  fix-root-causes/SKILL.md
-  sequence-verifiable-units/SKILL.md
-  prove-it-works/SKILL.md
+skills/<name>/
+  SKILL.md                 required manifest and instructions
+  references/              optional, loaded on demand
+  assets/                  optional templates/resources
+  scripts/                 optional executable helpers
+  LICENSE.pstack.txt       upstream notice for these adaptations
 ```
+
+The `name` and `description` in each `SKILL.md` are the discovery surface. Keep them precise. Detailed procedures belong in the body or on-demand references.
+
+Installed ChatGPT skills can be selected explicitly or activated automatically when the product and account surface support Skills. This repository intentionally does not assume that linking GitHub makes its skill folders automatically installable.
+
+## Architecture
+
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for:
+
+- WebChatGPT/Agent Skills loading boundaries;
+- composition and trigger precedence;
+- GitHub exact-head review semantics;
+- capability detection and read/write boundaries;
+- verification and audit contracts;
+- packaging and validation rules.
+
+See [`docs/WEBCHATGPT.md`](docs/WEBCHATGPT.md) for the product-facing deployment notes.
+
+## Validation
+
+The authoritative format validator is the Agent Skills `skills-ref` validator when available:
+
+```text
+skills-ref validate ./skills/architect
+```
+
+Pryzael also carries a lightweight repository check:
+
+```text
+python scripts/validate_skills.py
+```
+
+It checks the subset of format and packaging invariants Pryzael relies on. It is not a replacement for the upstream validator.
 
 ## Provenance
 
-These materials are adapted from selected skills in [`cursor/plugins/pstack`](https://github.com/cursor/plugins/tree/main/pstack/skills), originally published under the MIT License. The adaptations remove or generalize Cursor-only mechanisms for WebChatGPT use while preserving the engineering intent of the source material.
+These materials are adapted from selected skills in Cursor's `pstack` plugin. Upstream pstack is MIT licensed. Each independently distributable skill folder contains `LICENSE.pstack.txt` so the notice remains present when a skill is copied or uploaded without the repository root.
 
-See `THIRD_PARTY_NOTICES.md` for source and license information.
+See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for repository-level provenance.

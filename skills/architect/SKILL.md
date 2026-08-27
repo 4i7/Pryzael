@@ -1,107 +1,69 @@
 ---
 name: architect
-description: Design non-trivial changes before implementation by grounding the existing system, sketching caller usage and data shapes, comparing alternatives, and treating repeated implementation friction as evidence that the architecture may be wrong.
-source: cursor/plugins pstack/skills/architect
-adapted_for: WebChatGPT
+description: "Design a non-trivial code or system change before implementation. Use when a task crosses API, module, ownership, persistence, concurrency, protocol, or other architectural boundaries, or when the user asks to architect or design the change first."
+metadata:
+  pryzael-source: "https://github.com/cursor/plugins/tree/main/pstack/skills/architect"
+  pryzael-target: "chatgpt"
+  pryzael-upstream-license: "MIT"
 ---
 
 # Architect
 
-Use this skill before a change that crosses function, module, ownership, persistence, concurrency, or protocol boundaries. The goal is to settle the shape of the change before implementation makes a weak design expensive to undo.
+Settle the caller-facing contract and ownership model before implementation makes a weak shape expensive to undo.
 
-Do not jump from a request directly to code. First establish how callers should use the result, which data shapes and invariants exist, where validation belongs, and which module owns each responsibility.
+## Workflow
 
-## Phase A: Ground
+### 1. Ground the existing system
 
-Build a traced model of the existing system using the sources and tools actually available in the session.
-
-At minimum determine:
+Trace enough real code and evidence to state:
 
 - entry points and callers;
-- important data shapes and state transitions;
-- ownership of mutable state;
-- external boundaries and validation points;
-- persistence, retries, concurrency, or ordering constraints;
-- tests or runtime paths that currently prove behavior;
-- historical rationale when commits, PRs, issues, or documentation are available.
+- data shapes, invariants, and state transitions;
+- mutable-state ownership;
+- external boundaries and validation;
+- persistence, retry, concurrency, and ordering constraints;
+- existing verification paths;
+- historical rationale when repository history or design records are available.
 
-Do not treat a filename list as grounding. Follow data and control flow far enough to state the relevant invariants.
+A file list is not grounding. Follow control and data flow until the constraints that shape the design are explicit. Mark missing facts instead of guessing them.
 
-If evidence is unavailable, mark the missing facts explicitly. Do not fill them with architectural guesses.
+### 2. Write caller usage first
 
-## Phase B: Sketch the contract
+Describe how a caller should use the result. Derive types, signatures, and module boundaries from that usage.
 
-Write the intended caller experience first. Derive the implementation surface from that usage rather than exposing internals and making callers adapt.
+The design package should cover:
 
-Produce a compact design package:
+1. caller usage;
+2. core data shapes and invariants;
+3. signatures/interfaces;
+4. module ownership and dependency direction;
+5. boundary validation and error semantics;
+6. persistence/concurrency semantics when relevant;
+7. verification strategy;
+8. rationale and rejected alternatives.
 
-1. Caller usage or API example.
-2. Core data shapes and invariants.
-3. Function or method signatures.
-4. Module ownership and dependency direction.
-5. Boundary validation and error behavior.
-6. Persistence/concurrency semantics when relevant.
-7. Verification strategy.
-8. Rationale and rejected alternatives.
+### 3. Compare real alternatives when the choice is expensive
 
-For consequential or hard-to-reverse choices, compare at least two structurally different designs when the available tools and context make that practical. Do not create fake alternatives that differ only in naming.
+For consequential or hard-to-reverse decisions, compare at least two structurally different shapes when practical. Do not manufacture alternatives that differ only in naming.
 
-Prefer designs that hide complexity behind a smaller coherent public surface. Avoid pass-through layers, temporal decomposition, duplicated validation, scattered state rules, and abstractions that require callers to know their internals.
+Prefer the design that hides complexity behind the smallest coherent public surface and preserves invariants with the least hidden state or duplicated policy.
 
-## Phase C: Decide
+### 4. Implement against the sketch when implementation is in scope
 
-Select the design that best preserves the system's invariants with the lowest reader and maintenance burden.
+Treat the design as a hypothesis. Surface meaningful deviations rather than silently adding optional fields, casts, locks, parameters, or special cases.
 
-State why the selected design wins and why serious alternatives were rejected. If a decision depends on an unverified assumption, name that assumption and its verification plan.
+Repeated deviations of the same shape are evidence that the architecture missed a concept. Re-ground that constraint and redesign as if it had existed from day one instead of layering workarounds.
 
-If the user explicitly requests a design checkpoint, stop after presenting the design. Otherwise proceed when implementation is part of the task and the available tools permit it.
+### 5. Compose only when needed
 
-## Phase D: Implement against the sketch
+- Use `interrogate` to adversarially challenge a contested or expensive design.
+- Use `prove-it-works` after implementation to prove the final artifact.
+- If the overall task is large or multi-phase, let `figure-it-out` own orchestration; do not recursively turn `architect` into a project manager.
 
-Treat the sketch as a hypothesis, not sacred text.
+## Capability contract
 
-During implementation, surface meaningful deviations instead of silently adding parameters, escape hatches, optional fields, casts, locks, or special cases. For each deviation ask which explanation is true:
-
-- the design missed a requirement;
-- the implementation is overreaching;
-- the existing system contains a constraint not found during grounding;
-- the architecture is wrong.
-
-A single hard edge case does not invalidate the design. Repeated friction of the same shape does.
-
-## Phase E: Scrap when the architecture is wrong
-
-Return to design rather than layering patches when patterns such as these appear:
-
-- the same workaround repeats in unrelated locations;
-- several edge cases require the same special-case branch;
-- types need repeated casts or "optional but always present" fields;
-- a new lock is required even though the design assumed state separation;
-- callers need knowledge of internal rules to use the abstraction correctly;
-- two or more independent implementation deviations point to the same missing concept.
-
-When this happens:
-
-1. Ground the newly discovered constraint.
-2. State the violated assumption.
-3. Redesign as if that constraint had been foundational from the beginning.
-4. Remove obsolete scaffolding before adding replacement structure.
-5. Re-check callers, invariants, and verification before continuing.
-
-## WebChatGPT tool adaptation
-
-Use connected GitHub, files, web sources, code execution, or other available tools for grounding and verification. Do not assume Cursor subagents, local worktrees, terminal access, or a specific model panel exists.
-
-If independent model attempts are unavailable, perform one explicit alternative-design pass yourself and label it as same-model analysis rather than independent consensus.
+Use only evidence and tools actually available. Do not claim independent model comparison, code execution, runtime proof, or repository writes unless they occurred. If a decisive fact cannot be observed, preserve it as an explicit assumption or `INCONCLUSIVE` verification item.
 
 ## Output
 
-Return:
-
-- grounded system model;
-- caller-first design;
-- selected structure and rationale;
-- rejected alternatives;
-- assumptions still unverified;
-- implementation deviations, if any;
-- verification evidence or `INCONCLUSIVE` where direct proof was unavailable.
+Return the grounded model, caller-first design, selected structure and rationale, rejected serious alternatives, unverified assumptions, implementation deviations if any, and verification evidence when implementation occurred.

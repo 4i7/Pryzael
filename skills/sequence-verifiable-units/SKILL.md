@@ -1,115 +1,55 @@
 ---
 name: sequence-verifiable-units
-description: Structure multi-step work as the smallest independently checkable units, verify each unit before advancing, and order commits or changes so the sequence itself demonstrates correctness.
-source: cursor/plugins pstack/skills/principle-sequence-verifiable-units
-adapted_for: WebChatGPT
+description: "Structure a migration, sweep, staged repair, repeated edit, or multi-step change as independently checkable transitions. Use when batching work would make failures hard to localize or when commits/PRs should form a reviewable proof sequence."
+metadata:
+  pryzael-source: "https://github.com/cursor/plugins/tree/main/pstack/skills/principle-sequence-verifiable-units"
+  pryzael-target: "chatgpt"
+  pryzael-upstream-license: "MIT"
 ---
 
 # Sequence Verifiable Units
 
-Use this skill for migrations, sweeps, repeated edits, staged repairs, multi-commit changes, or any workflow where a later failure would be difficult to localize if many steps were batched together.
+Each unit starts from a known state, makes one coherent change, ends in a checkable state, and is verified before dependent work advances.
 
-The invariant is simple: each unit begins from a known state, makes one coherent change, ends in a checkable state, and is verified before the next unit begins.
+## Choose the unit
 
-## Why
+Use the smallest unit that is both meaningful and verifiable: one caller migration plus check, one schema behavior plus fixtures, failing test then fix, one state migration plus read-back, one boundary introduction, or one validator rule plus acceptance/rejection cases.
 
-When ten edits are made and verification runs once, a failure implicates the whole batch. When each edit is checked before the next, the failure is localized to one transition.
-
-The same ordering also helps reviewers. A well-sequenced stack of changes can show the problem, introduce the necessary structure, apply the fix, and remove obsolete structure without requiring trust in a large final diff.
-
-## Define the unit
-
-Choose the smallest unit that is both meaningful and verifiable.
-
-A unit may be:
-
-- one caller migrated to a new API plus its check;
-- one schema or parser behavior plus fixtures;
-- one failing test that establishes a defect;
-- one fix that turns that test green;
-- one durable-state migration plus read-back verification;
-- one module boundary introduced before moving behavior behind it;
-- one validator change plus cases proving acceptance and rejection behavior.
-
-Do not make units so small that verification cannot establish anything useful. Do not make them so large that a failure has many plausible causes.
+Do not make units so tiny that the check proves nothing or so broad that failure has many plausible causes.
 
 ## Execution loop
 
 For every unit:
 
-1. State the precondition or baseline.
-2. State the intended invariant or behavior change.
-3. Make only the change required for that unit.
-4. Inspect the actual artifact/diff produced.
-5. Run the strongest available check.
-6. Record `VERIFIED`, `NOT VERIFIED`, or `INCONCLUSIVE`.
-7. Advance only when the dependency state is acceptable under the workflow's explicit rules.
+1. state baseline/precondition;
+2. state intended invariant or behavior change;
+3. make only that coherent change when execution is in scope;
+4. inspect the actual artifact/diff;
+5. run the strongest relevant check, applying `prove-it-works` semantics;
+6. record `VERIFIED`, `NOT VERIFIED`, or `INCONCLUSIVE`;
+7. advance only from a dependency state explicitly acceptable to the workflow.
 
-Do not defer all checks to the end for convenience.
-
-If a repeated migration is performed by a script or codemod, keep per-unit or per-batch validation anyway. Automation reduces editing cost; it does not eliminate verification value.
+Automation reduces editing cost, not verification value. Keep per-unit or bounded-batch checks even for scripts/codemods.
 
 ## Delivery order
 
-Order commits, PRs, or documented phases so each transition makes sense on its own and adds evidence.
+Arrange commits, PRs, or phases so the sequence itself explains and proves the work. Useful shapes include:
 
-Useful sequences include:
-
-### Defect repair
-
-1. Reproducer/failing test.
-2. Root-cause fix.
-3. Cleanup made safe by the fix.
-
-### Migration
-
-1. Baseline/verification harness.
-2. New structure or API.
-3. Caller migrations in independently checked units.
-4. Proof that legacy callers are zero.
-5. Delete legacy API.
-
-### Architecture reshape
-
-1. Evidence of current constraint.
-2. New boundary/data shape.
-3. Move behavior behind it.
-4. Remove superseded compatibility structure.
-
-### Performance work
-
-1. Measured baseline.
-2. One hypothesized change.
-3. Before/after measurement.
-4. Keep only measured wins.
-
-The ordering should make the reasoning reviewable, not merely match the chronological order in which ideas occurred.
-
-## WebChatGPT adaptation
-
-When ChatGPT has repository write tools, preserve these units as commits/files/PRs when appropriate. When it only has read access, produce the same unit plan and verification contracts without claiming execution.
-
-Do not assume a clean worktree, terminal, or branch exists. Resolve exact repository and ref identity from connected GitHub when those facts matter.
+- defect: reproducer -> root fix -> safe cleanup;
+- migration: baseline/harness -> new structure -> checked caller moves -> zero legacy callers -> delete legacy API;
+- architecture: current constraint evidence -> new boundary/data shape -> move behavior -> remove superseded path;
+- performance: measured baseline -> one hypothesis -> same-workload measurement -> keep measured wins only.
 
 ## Failure handling
 
-When a unit fails:
+When a unit fails, stop dependent work. Determine whether the change or the gate is wrong. If the cause is not immediate, hand the unexplained failure once to `fix-root-causes`; if already operating inside that workflow, do not recursively invoke it again.
 
-- stop building dependent units on top of it;
-- determine whether the change or the verification gate is wrong;
-- use `fix-root-causes` if the failure is not immediately explained;
-- revert or supersede the failed change when writes are available;
-- record the failure rather than hiding it in a later successful batch.
+An inconclusive unit is not green. Continuing despite it requires an explicit dependency/risk statement.
 
-An inconclusive unit is not green. If work must continue despite it, state that dependency and risk explicitly.
+## Capability contract
+
+Do not assume a clean worktree, terminal, writable branch, or commit capability. Read-only sessions can still produce the unit sequence and verification contracts but must not claim execution.
 
 ## Output
 
-Return:
-
-- ordered unit list;
-- verification predicate for each unit;
-- current state/result of each unit;
-- dependency relationships;
-- exact first failing or inconclusive unit when the sequence stops;
-- whole-sequence verification still required at the end.
+Return ordered units, verification predicate and result for each, dependencies, exact first failing/inconclusive unit when stopped, and whole-sequence verification still required at the end.

@@ -1,129 +1,76 @@
 ---
 name: interrogate
-description: Adversarially review a change against its stated intent, separate real defects from noise, synthesize independent findings when available, and never auto-apply review suggestions without lead judgment.
-source: cursor/plugins pstack/skills/interrogate
-adapted_for: WebChatGPT
+description: "Adversarially review a code change, pull request, exact commit, branch diff, or design against its stated intent. Use for PR/code review, exact-head review, stress testing, finding blind spots, challenging architecture, or separating real blockers from noisy review suggestions."
+metadata:
+  pryzael-source: "https://github.com/cursor/plugins/tree/main/pstack/skills/interrogate"
+  pryzael-target: "chatgpt"
+  pryzael-upstream-license: "MIT"
 ---
 
 # Interrogate
 
-Use this skill to challenge a diff, branch, design, patch, or implementation before treating it as ready.
+Find defects, broken invariants, unsafe assumptions, architectural regressions, and verification gaps that matter to the stated intent. Do not maximize comment count and do not auto-apply review suggestions.
 
-The goal is not to maximize the number of comments. The goal is to find defects, broken invariants, unsafe assumptions, architectural regressions, and verification gaps that matter to the actual intent of the work.
+## Workflow
 
-Review findings are advisory evidence. Do not automatically modify code merely because a reviewer suggested a change.
+### 1. Bind scope and intent
 
-## Step 1: Determine exact scope
+Resolve the exact artifact being reviewed and state:
 
-Resolve the artifact under review from the user's request and connected sources.
+- intended change;
+- behavior/constraints that must remain unchanged;
+- expected success evidence;
+- repository/base/candidate/PR/files when applicable.
 
-Prefer exact identities:
+If this is a GitHub review where commit identity matters, read and follow [`references/github-exact-head-review.md`](references/github-exact-head-review.md).
 
-- repository;
-- base branch or base commit;
-- candidate branch or exact candidate commit;
-- PR number when applicable;
-- explicit file set when the review is intentionally narrower.
+### 2. Review through distinct evidence lenses
 
-Read the full relevant diff plus enough surrounding code to understand invariants. Do not review isolated changed lines when correctness depends on callers, schemas, state, persistence, or protocol behavior.
+When genuinely independent reviewers/models are available, give them the same scope, intent, artifact, and rubric. Diversity comes from independent reasoning, not theatrical personas.
 
-If the exact artifact cannot be resolved, say what is missing rather than silently reviewing a nearby version.
+Otherwise use explicit single-reviewer passes:
 
-## Step 2: State the intent
+1. correctness and invariants;
+2. architecture and ownership;
+3. compatibility and blast radius;
+4. verification quality;
+5. maintainability and root-cause discipline.
 
-Before reviewing, write one concise intent statement answering:
+Do not describe these lenses as independent models.
 
-- what behavior or structure is meant to change;
-- what must remain unchanged;
-- which important constraints apply;
-- what evidence is expected to prove success.
+### 3. Validate every candidate finding
 
-Derive this from the user's request, issue/PR description, commits, documentation, and code. Distinguish explicit intent from inferred intent.
+For each finding:
 
-## Step 3: Review from independent evidence paths
+- identify concrete code/artifact;
+- trace the failure mechanism;
+- separate observation from inference;
+- check surrounding invariants that may clear it;
+- seek the cheapest decisive proof;
+- deduplicate symptoms of the same underlying defect.
 
-When the environment genuinely supports multiple independent reviewers or model families, give each the same intent, scope, diff, and review rubric. Do not assign theatrical personas merely to create artificial diversity.
+A plausible concern without a credible failure path is not automatically a defect.
 
-When WebChatGPT exposes only one reasoning model, use single-reviewer mode and compensate by making the review passes explicit:
+### 4. Apply lead judgment
 
-1. **Correctness and invariants.** Trace state transitions, boundary conditions, error paths, retries, and ordering.
-2. **Architecture and ownership.** Check whether responsibilities, data shapes, and module boundaries remain coherent.
-3. **Compatibility and blast radius.** Check callers, persistence, protocols, schemas, configuration, and cross-language consumers.
-4. **Verification quality.** Check whether tests/validators actually prove the intended behavior rather than a proxy.
-5. **Maintainability.** Look for duplicated rules, hidden state, special cases, escape hatches, and symptom fixes.
+Classify:
 
-Do not call these passes independent models. They are separate lenses from one reviewer.
+- **Act On:** real issue that blocks correctness, security, data integrity, architectural invariants, or maintainability required by the task.
+- **Consider:** legitimate tradeoff that may not justify changing this work now.
+- **Noted:** valid context with low action value.
+- **Dismissed:** wrong, already prevented, out of scope, speculative without a credible path, or churn without benefit.
 
-## Step 4: Validate findings
+Consensus raises attention but is never proof. Contrary source/runtime evidence wins.
 
-For each candidate finding:
+### 5. Compose only where useful
 
-- identify the concrete code or artifact involved;
-- state the failure mechanism step by step;
-- distinguish observed fact from inference;
-- check surrounding code for an existing invariant that clears the concern;
-- run or identify the cheapest decisive verification when tools permit it;
-- deduplicate different descriptions of the same underlying problem.
+- Use `blast-radius` when downstream compatibility is the central uncertainty.
+- Use `prove-it-works` when an `Act On` finding or final verdict requires decisive execution/runtime proof.
 
-A plausible concern without a viable failure path is not automatically a defect.
+## Capability contract
 
-## Step 5: Lead judgment
-
-Classify findings as:
-
-### Act On
-A real issue affecting correctness, security, data integrity, architectural invariants, or maintainability enough to block the stated goal.
-
-### Consider
-A legitimate issue or tradeoff whose benefit may not justify changing the current work immediately.
-
-### Noted
-Technically valid context with low current action value.
-
-### Dismissed
-Wrong, already prevented by an invariant, irrelevant to the requested scope, speculative without a credible failure path, or a nitpick that does not earn code churn.
-
-For every non-trivial finding, include the evidence and reason for its classification.
-
-## Agreement handling
-
-If genuinely independent reviewers are available:
-
-- findings independently raised by multiple reviewers deserve higher attention;
-- lone findings still require technical validation;
-- explicit disagreement is useful and should be surfaced;
-- consensus is not proof and never overrides contrary runtime/source evidence.
-
-If only one reviewer is available, omit consensus claims entirely.
-
-## Verification
-
-For findings categorized `Act On`, prefer a reproducer, test, validator, trace, or direct source proof before finalizing the verdict.
-
-If decisive execution is unavailable, mark the finding's verification status `INCONCLUSIVE` even when the static reasoning is strong.
+Review is read-only by default even if the active connector exposes writes. Do not mutate code, PRs, comments, labels, or branches unless the user separately asks for that action. If decisive runtime proof is unavailable, distinguish strong static evidence from `VERIFIED` runtime behavior.
 
 ## Output
 
-### Intent
-The exact intent and preserved constraints.
-
-### Scope
-Repository/ref/PR/files reviewed.
-
-### Act On
-Each finding with location, failure mechanism, evidence, and verification status.
-
-### Consider
-Legitimate tradeoffs and why they are not blockers yet.
-
-### Noted
-Low-priority but useful observations.
-
-### Dismissed
-Rejected candidate findings with concise reasons.
-
-### Agreement Map
-Only when genuinely independent reviews were performed. Otherwise state `single-reviewer mode`.
-
-### Verdict
-State whether the reviewed artifact is acceptable for its stated purpose, not whether it is aesthetically perfect. Distinguish `VERIFIED`, `NOT VERIFIED`, and `INCONCLUSIVE` where direct proof matters.
+Return intent, exact scope/artifact identity, `Act On`, `Consider`, `Noted`, `Dismissed`, agreement map only when genuinely independent reviews occurred, and a verdict bounded to the artifact actually reviewed.
