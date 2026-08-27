@@ -36,7 +36,7 @@ Trigger precedence for overlapping engineering tasks:
 7. **Completion/proof question:** `prove-it-works` owns verification.
 8. **Audit/handoff/decision-log request:** `show-me-your-work` owns the trail.
 
-If multiple conditions apply, the higher-level owner composes the lower-level skills rather than duplicating them.
+This precedence is routing guidance, not a promise that every Agent Skills client exposes deterministic priority controls. Descriptions are written to reduce ambiguous activation, and multiple skills may legitimately be loaded for one task.
 
 ## 4. Composition graph
 
@@ -74,7 +74,19 @@ show-me-your-work         leaf
 prove-it-works            leaf
 ```
 
-A composed skill owns only its concern. The caller remains responsible for the overall task and must not recursively re-enter the same workflow.
+### Soft composition, not runtime linkage
+
+The public Agent Skills model allows a client to use one or more relevant skills, but it does not define a portable API by which one `SKILL.md` can synchronously invoke another by name.
+
+Therefore Pryzael composition is **soft**:
+
+- a skill may state that another named skill should own a concern when that skill is available;
+- the client may activate both skills automatically, or the user/model may select the other skill explicitly;
+- the calling skill must still remain useful if the named skill is unavailable;
+- no runtime correctness may depend on a cross-skill filesystem reference;
+- composition must never recurse indefinitely.
+
+A composed skill owns only its concern. The top-level workflow remains responsible for task state, evidence integration, and final handoff.
 
 ## 5. Common capability contract
 
@@ -108,7 +120,7 @@ Core invariant:
 
 > A review verdict applies to one explicitly bound base/candidate artifact pair. Moving branch or PR state must never silently replace that pair.
 
-The review therefore binds exact SHAs, reads changed and contextual files at those SHAs, keys CI evidence to the candidate SHA, and rechecks moving PR/branch identity before reporting current-state claims.
+The review binds exact SHAs, verifies expected ancestry/comparison semantics, reads changed and contextual files at explicit SHAs, keys CI evidence to the candidate SHA, and rechecks moving PR/branch identity before reporting current-state claims.
 
 ## 8. GitHub connector architecture
 
@@ -119,9 +131,11 @@ Required read operations for a strong exact-head review are conceptually:
 - resolve repository;
 - resolve commit objects;
 - read PR metadata when a PR is part of the task;
-- compare exact base and candidate commits;
+- compare exact base and candidate commits and inspect ancestry/status;
+- enumerate changed paths;
 - read file content at an exact commit;
-- read commit-bound checks/workflow evidence when relevant.
+- read commit-bound checks/workflow evidence when relevant;
+- re-read moving context before claiming a verdict applies to the current PR/branch tip.
 
 Optional write operations are outside review semantics. `interrogate` is read-only by default even if the active connector exposes writes.
 
