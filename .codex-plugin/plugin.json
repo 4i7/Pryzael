@@ -10,5 +10,24 @@
     "debugging",
     "verification"
   ],
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Pryzael",
+    "shortDescription": "Engineering rigor for AI work",
+    "longDescription": "Reusable engineering workflows for architecture design, root-cause debugging, blast-radius analysis, adversarial review, verifiable multi-step execution, proof of completion, and auditable handoffs.",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Architecture design",
+      "Root-cause debugging",
+      "Adversarial code review",
+      "Blast-radius analysis",
+      "Verification planning",
+      "Auditable engineering handoffs"
+    ],
+    "defaultPrompt": [
+      "Architect this change before implementation and identify the invariants.",
+      "Review this exact GitHub candidate against its base and report only actionable findings.",
+      "Verify whether this work is actually complete and show the evidence."
+    ]
+  }
 }
