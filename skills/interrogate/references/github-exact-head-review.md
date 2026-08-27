@@ -37,9 +37,17 @@ Possible states:
 
 A drifted PR does not erase the usefulness of a historical exact-SHA review, but the final report must not claim that verdict describes the new PR head.
 
-## 3. Build the review diff from exact commits
+## 3. Establish ancestry and comparison semantics
 
-Compare the bound base and candidate directly. Confirm the relationship expected by the task, especially when the candidate is supposed to descend from the base.
+When the task says the candidate is based on, stacked on, or cumulatively ahead of the base, verify that relationship before treating the comparison as a linear stack.
+
+If the candidate is expected to descend from the base but the repository reports divergence or a different merge base, surface that as an identity/ancestry problem. Do not silently use a merge-base comparison and describe it as a direct base-to-candidate stack.
+
+If review of divergent commits is still intended, state the comparison semantics explicitly before continuing.
+
+## 4. Build the review diff from exact commits
+
+Compare the bound base and candidate using exact commit identifiers under the semantics established above.
 
 Do not use an unqualified current PR patch as authority when the task mandates different exact SHAs.
 
@@ -47,7 +55,7 @@ For every changed file, read the candidate version at the candidate SHA. For del
 
 Search may discover paths, but once a path/ref is known, direct exact-ref fetch is authoritative.
 
-## 4. Keep intent/history separate from artifact identity
+## 5. Keep intent/history separate from artifact identity
 
 PR descriptions, issues, commit messages, prior review discussion, and documentation can explain intent or historical rationale. They do not change which bytes are under review.
 
@@ -57,15 +65,15 @@ Distinguish:
 - repository/PR documented intent;
 - reviewer inference.
 
-## 5. Bind verification evidence to the candidate SHA
+## 6. Bind verification evidence to the candidate SHA
 
-CI statuses, workflow runs, validator results, generated evidence, and external test claims count only when their artifact identity can be tied to the bound candidate (or another explicitly stated artifact relevant to the claim).
+CI statuses, workflow runs, validator results, generated evidence, and external test claims count only when their artifact identity can be tied to the bound candidate or another explicitly stated artifact relevant to the claim.
 
 Do not use a green check from a different commit as proof for the candidate.
 
 When runtime execution is outside the active ChatGPT environment, static review can still identify defects, but required runtime predicates remain `INCONCLUSIVE` unless commit-bound external evidence resolves them.
 
-## 6. Recheck identity before the final verdict
+## 7. Recheck identity before the final verdict
 
 If current PR/branch status matters, resolve it again before reporting.
 
@@ -75,7 +83,22 @@ If it moved during the review:
 - state that the current moving head is unreviewed;
 - do not blend evidence from the old and new heads.
 
-## 7. Read-only default
+## 8. Connector operation model
+
+Use connector capabilities by semantic role rather than assuming stable internal tool names:
+
+1. resolve repository identity;
+2. resolve/fetch exact commit objects;
+3. read PR/branch metadata when moving context matters;
+4. compare exact base and candidate and inspect ancestry/status;
+5. enumerate changed paths;
+6. fetch changed/context files at exact SHAs;
+7. read candidate-bound checks/workflows when relevant;
+8. re-read moving context before a current-state claim.
+
+If one operation is unavailable, adapt transparently. Never fill the missing result from an unbound search hit or stale nearby artifact.
+
+## 9. Read-only default
 
 Exact-head review does not require repository mutation. Even if the connector exposes write actions, do not push, edit, comment, label, merge, or otherwise mutate GitHub unless the user separately requested that action.
 
@@ -87,8 +110,9 @@ A strong exact review should be able to state:
 REPOSITORY: owner/name
 BASE: <exact sha>
 CANDIDATE: <exact sha>
+ANCESTRY/COMPARE: <relationship and comparison semantics>
 MOVING CONTEXT: <PR/branch and whether it still matches>
-DIFF SOURCE: exact base..candidate comparison
+DIFF SOURCE: <exact base/candidate comparison>
 CI/EVIDENCE IDENTITY: <candidate-bound / unavailable / mixed and rejected>
 ```
 
