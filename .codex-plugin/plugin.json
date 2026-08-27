@@ -1,0 +1,14 @@
+{
+  "name": "pryzael",
+  "version": "0.1.0",
+  "description": "Rigorous engineering workflows for architecture, debugging, review, verification, and auditable handoffs.",
+  "repository": "https://github.com/4i7/Pryzael",
+  "keywords": [
+    "engineering",
+    "architecture",
+    "code-review",
+    "debugging",
+    "verification"
+  ],
+  "skills": "./skills/"
+}
