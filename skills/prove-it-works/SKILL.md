@@ -26,9 +26,10 @@ State the strongest level actually reached:
 1. **Restate finish predicates** as observable claims.
 2. **Bind artifact identity.** Inspect the exact repository/ref/commit/files or generated artifact actually being judged.
 3. **Choose falsifying checks.** A good check would fail if the predicate were false.
-4. **Exercise the strongest relevant path.** Examples: real CLI command, valid/invalid parser replay, write-reopen-read persistence, request-response integration, running UI flow, same-workload performance comparison, or migration plus proof that old consumers are gone.
-5. **Challenge the observation method.** Ask whether cached/derived state, wrong ref, swallowed failures, stale screenshots, or a test that misses the changed path could create a false green.
-6. **Classify each predicate** as `VERIFIED`, `NOT VERIFIED`, or `INCONCLUSIVE`.
+4. **Build the verification lever when the project lacks one.** Prefer existing repo-native commands/harnesses first. If no repeatable real-surface path exists, consult `references/create-verification-harness.md`. If an existing harness/feature map may have drifted, consult `references/maintain-verification-harness.md` before trusting it.
+5. **Exercise the strongest relevant path.** Examples: real CLI command, valid/invalid parser replay, write-reopen-read persistence, request-response integration, running UI flow, same-workload performance comparison, or migration plus proof that old consumers are gone.
+6. **Challenge the observation method.** Ask whether cached/derived state, wrong ref, swallowed failures, stale screenshots, or a test that misses the changed path could create a false green.
+7. **Classify each predicate** as `VERIFIED`, `NOT VERIFIED`, or `INCONCLUSIVE`.
 
 `INCONCLUSIVE` is never a pass.
 

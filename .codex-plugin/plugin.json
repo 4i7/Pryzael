@@ -1,7 +1,7 @@
 {
   "name": "pryzael",
-  "version": "0.2.0",
-  "description": "Rigorous engineering workflows for architecture, debugging, review, verification, and auditable handoffs.",
+  "version": "0.3.0",
+  "description": "Rigorous engineering workflows for system understanding, architecture, debugging, review, verification, and auditable handoffs.",
   "repository": "https://github.com/4i7/Pryzael",
   "keywords": [
     "engineering",
@@ -9,15 +9,19 @@
     "code-review",
     "debugging",
     "verification",
+    "codebase-understanding",
+    "design-rationale",
     "mcp"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Pryzael",
     "shortDescription": "Engineering rigor for AI work",
-    "longDescription": "Reusable engineering workflows for architecture design, root-cause debugging, blast-radius analysis, adversarial review, verifiable multi-step execution, proof of completion, and auditable handoffs. The canonical skill workflows are also projected as read-only remote MCP tools by the hosted Pryzael Worker.",
+    "longDescription": "Reusable engineering workflows for understanding how systems work and why they were designed that way, architecture design, root-cause debugging, blast-radius analysis, adversarial review, verifiable multi-step execution, proof of completion, and auditable handoffs. Canonical Skill workflows are projected as read-only remote MCP tools by the hosted Pryzael Worker.",
     "category": "Developer Tools",
     "capabilities": [
+      "System and codebase explanation",
+      "Design-rationale investigation",
       "Architecture design",
       "Root-cause debugging",
       "Adversarial code review",
@@ -27,6 +31,8 @@
       "Read-only remote MCP workflow tools"
     ],
     "defaultPrompt": [
+      "Explain how this subsystem works and where its ownership boundaries are.",
+      "Investigate why this design exists and separate evidence from inference.",
       "Architect this change before implementation and identify the invariants.",
       "Review this exact GitHub candidate against its base and report only actionable findings.",
       "Verify whether this work is actually complete and show the evidence."

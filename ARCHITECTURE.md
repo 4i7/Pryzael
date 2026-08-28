@@ -19,9 +19,9 @@ There are three distinct authorities:
 
 - **Workflow authority:** each `skills/<name>/SKILL.md` plus files below that Skill root.
 - **MCP projection implementation:** `scripts/generate_mcp_catalog.mjs` plus `worker/index.mjs`.
-- **Plugin packaging authority:** `.codex-plugin/plugin.json`, which continues to describe the installable Skill collection.
+- **Plugin packaging authority:** `.codex-plugin/plugin.json`, which continues to describe the installable Skill collection and owns the Pryzael version used by the generated MCP catalog.
 
-The build generator derives tool descriptions, workflow bodies, and package-local text resources from the canonical Skill packages. The Worker must not carry manually duplicated workflow text.
+The build generator derives tool descriptions, workflow bodies, package-local text resources, and MCP version from canonical repository sources. The Worker must not carry manually duplicated workflow text or version constants.
 
 Every Skill remains self-contained for native Skill clients and carries the upstream pstack notice.
 
@@ -53,7 +53,7 @@ The deployed runtime must not require a local process or tunnel, Durable Objects
 
 For native Agent Skills, `name` and `description` in `SKILL.md` form the discovery surface.
 
-For MCP, the build generator creates one tool per Skill and copies that same frontmatter `description` into the derived catalog. Hyphenated Skill names are converted only to underscore tool identifiers (`blast-radius` -> `blast_radius`); semantic trigger text is not duplicated in Worker source.
+For MCP, the build generator creates one tool per top-level Skill and copies that same frontmatter `description` into the derived catalog. Hyphenated Skill names are converted only to underscore tool identifiers (`blast-radius` -> `blast_radius`); semantic trigger text is not duplicated in Worker source.
 
 Trigger precedence remains guidance rather than a deterministic host promise:
 
@@ -62,11 +62,26 @@ Trigger precedence remains guidance rather than a deterministic host promise:
 3. defect/regression diagnosis -> `fix-root-causes`;
 4. boundary design before implementation -> `architect`;
 5. downstream compatibility/impact -> `blast-radius`;
-6. migration/sweep/staged sequence -> `sequence-verifiable-units`;
-7. explicit completion/proof -> `prove-it-works`;
-8. audit/handoff/decision trail -> `show-me-your-work`.
+6. explanation of how the current system/runtime flow works -> `how`;
+7. historical/product/operational rationale for why a design exists -> `why`;
+8. migration/sweep/staged sequence -> `sequence-verifiable-units`;
+9. explicit completion/proof -> `prove-it-works`;
+10. audit/handoff/decision trail -> `show-me-your-work`.
 
 This remains subject to empirical routing qualification. The MCP transport must not introduce a second hidden router.
+
+### Capability admission gate
+
+Before adding another top-level Skill/MCP tool, compare these alternatives:
+
+1. **No addition.** Existing workflow already owns the invariant.
+2. **Owner-local resource/playbook.** Specialized procedure belongs under an existing owner and loads only when needed.
+3. **Host capability.** ChatGPT/GitHub/another App already owns the action; Pryzael should guide its use rather than proxy it.
+4. **New top-level tool.** Admit only when the user intent is semantically distinct and cannot be represented cleanly by an existing owner.
+
+For consequential changes also compare deletion/reuse vs new mechanism, foundational redesign vs incremental patch, and stateless/generated vs stateful/hand-maintained shapes. `skills/architect/references/design-space-gate.md` contains the reusable decision procedure.
+
+This keeps the routing surface lean. Upstream packaging is evidence, not authority. See `docs/PSTACK_INTEGRATION.md` for the current pstack adoption matrix.
 
 ## 5. Composition
 
@@ -74,6 +89,8 @@ Composition stays directional and soft:
 
 ```text
 figure-it-out
+  -> how
+  -> why
   -> architect
   -> blast-radius
   -> fix-root-causes
@@ -81,6 +98,15 @@ figure-it-out
   -> interrogate
   -> show-me-your-work
   -> prove-it-works
+
+how
+  -> why
+  -> architect
+  -> blast-radius
+
+why
+  -> how
+  -> architect
 
 architect
   -> interrogate
@@ -98,6 +124,7 @@ interrogate
   -> prove-it-works
 
 fix-root-causes
+  -> architect
   -> prove-it-works
 
 show-me-your-work         leaf
@@ -114,9 +141,12 @@ The generator runs at build/deploy time and:
 2. validates directory/name consistency;
 3. reads `name`, `description`, and body;
 4. collects text resources under `references/`, `assets/`, and `scripts/` without following symlinks;
-5. emits a disposable JavaScript catalog consumed by the Worker.
+5. reads the Pryzael version from `.codex-plugin/plugin.json`;
+6. emits a disposable JavaScript catalog consumed by the Worker.
 
 The Worker creates one MCP tool per catalog entry. A normal call returns the selected Skill body and the list of bundled package-local text resources available for that Skill. When called with an exact advertised `resource` key, it returns that resource's text. Scripts are returned as text only and are never executed.
+
+Specialized pstack-derived procedures should prefer package-local resources rather than new top-level tools when an existing owner already exists.
 
 MCP annotations are:
 
@@ -179,6 +209,8 @@ Core invariant:
 
 Pryzael uses GitHub operation semantics rather than hard-coded host-internal tool names. The MCP Worker does not proxy GitHub and never receives GitHub credentials. Host-provided repository reads/writes remain separately authorized capabilities.
 
+`why` may ask the host to consult multiple available Apps/evidence categories, but Pryzael itself still does not proxy or persist their data.
+
 ## 12. Decision trails
 
 `show-me-your-work` owns decision/evidence trail semantics. The logical fields remain `ts`, `phase`, `decision`, `why`, `evidence`, `result`. Its TSV template is bundled as a package-local MCP resource and remains a native Skill asset.
@@ -193,7 +225,7 @@ Validation has four layers:
 
 1. upstream Agent Skills validation when available;
 2. `python scripts/validate_skills.py` for Pryzael Skill-package invariants;
-3. generated-catalog plus Wrangler dry-run bundle validation;
+3. generated-catalog, Worker protocol smoke, and Wrangler dry-run bundle validation;
 4. live Cloudflare endpoint and ChatGPT product-surface qualification.
 
 Expected Worker check after dependencies are installed:
@@ -206,6 +238,7 @@ Important invariants:
 
 - `.codex-plugin/plugin.json` remains valid and points to `./skills/`;
 - Worker tool descriptions and bodies are generated from canonical Skills;
+- Worker version is generated from plugin metadata rather than separately hard-coded;
 - runtime performs no filesystem scan, downstream network/API call, or persistent-state access;
 - package resources cannot be invented by the caller and are limited to generated catalog keys;
 - a Skill change requires no manual parallel edit to MCP workflow text;
@@ -223,7 +256,7 @@ Individual Skills may still be uploaded/installed on ChatGPT surfaces that suppo
 
 ### Remote MCP path
 
-Cloudflare Workers Builds connects to the GitHub repository, runs the generator during Wrangler's custom build, and deploys the Worker to a `workers.dev` hostname. The exact hostname is deployment output and must not be guessed in advance.
+Cloudflare Workers Builds connects to the GitHub repository, runs the generator during Wrangler's custom build, and deploys the Worker to a `workers.dev` hostname. Stable production should follow `main`; feature branches are qualification candidates until merged.
 
 The ChatGPT developer Plugin connection uses the resulting:
 
@@ -233,7 +266,7 @@ https://<actual-worker-hostname>/mcp
 
 ### Authentication
 
-Initial qualification uses an unauthenticated endpoint because the Worker serves only public repository workflow text and performs no external action. If live Chat-side execution succeeds, reassess whether OAuth or another supported authorization boundary is warranted before broader exposure.
+The current endpoint is unauthenticated because the Worker serves only public repository workflow text and performs no external action. If future capabilities introduce private data or writes, reassess OAuth/authorization before exposing them.
 
 ## 16. Infrastructure decision
 

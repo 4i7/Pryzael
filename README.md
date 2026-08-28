@@ -11,6 +11,8 @@ The MCP layer is a generated adapter, not a second workflow implementation.
 
 ## Skills
 
+- `how` — build a working mental model of how a subsystem, feature flow, or ownership boundary currently works.
+- `why` — investigate historical/product/operational rationale and separate evidence from inference.
 - `architect` — settle caller usage, data shapes, invariants, interfaces, and ownership before implementation.
 - `blast-radius` — find non-obvious downstream breakage and prove the safety assumptions a change depends on.
 - `figure-it-out` — orchestrate large, cross-cutting, unusual, or multi-phase work around falsifiable completion criteria.
@@ -20,18 +22,23 @@ The MCP layer is a generated adapter, not a second workflow implementation.
 - `sequence-verifiable-units` — split multi-step work into independently checkable transitions and verify before advancing.
 - `prove-it-works` — verify completion claims against the exact artifact and strongest available real behavior path.
 
+Specialized pstack-derived procedures such as TDD, verification-harness creation/maintenance, and architecture design-space principles are kept as owner-local resources instead of becoming extra MCP tools. See [`docs/PSTACK_INTEGRATION.md`](docs/PSTACK_INTEGRATION.md).
+
 ## Runtime shape
 
 ```text
 .codex-plugin/plugin.json
 skills/*/SKILL.md                 canonical workflow authority
+skills/*/references/*             progressive-disclosure procedures
 scripts/generate_mcp_catalog.mjs  build-time projection
 worker/index.mjs                  stateless Streamable HTTP MCP
 wrangler.jsonc                    Cloudflare Workers deployment
 package.json
 ```
 
-Before Wrangler bundles the Worker, `scripts/generate_mcp_catalog.mjs` reads the eight canonical Skill packages and emits an ephemeral JavaScript catalog under `worker/generated/`. The deployed Worker therefore needs no filesystem, database, KV, D1, Durable Object, background process, OpenAI API call, or local PC.
+Before Wrangler bundles the Worker, `scripts/generate_mcp_catalog.mjs` reads all canonical Skill packages and emits an ephemeral JavaScript catalog under `worker/generated/`. The version is derived from `.codex-plugin/plugin.json`; the Worker test derives its expected version/tool count from that generated catalog, avoiding separate hand-maintained copies.
+
+The deployed Worker needs no filesystem, database, KV, D1, Durable Object, background process, OpenAI API call, or local PC.
 
 The Worker exposes:
 
@@ -43,6 +50,12 @@ Each MCP tool description comes from the matching `SKILL.md` frontmatter, and it
 The runtime uses Cloudflare's minimal stateless MCP path directly through `@modelcontextprotocol/server`; it does not require the Agents SDK or Cloudflare-specific TypeScript definitions.
 
 See [`docs/MCP.md`](docs/MCP.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## Capability admission
+
+Do not add a new top-level tool merely because an upstream Skill exists. First ask whether the capability is already owned, can be an owner-local resource, or is already supplied by a host App/tool. For consequential choices, compare deletion/reuse, foundational redesign, and at least one structurally different architecture before adoption. Prefer stateless/generated shapes until evidence requires more moving parts.
+
+The detailed adoption matrix is in [`docs/PSTACK_INTEGRATION.md`](docs/PSTACK_INTEGRATION.md).
 
 ## Authority boundary
 
@@ -65,9 +78,9 @@ The MCP server itself performs no repository mutation or downstream tool action.
 
 Pryzael targets a stateless Cloudflare Worker so ChatGPT can reach the MCP endpoint without a local machine or tunnel. Cloudflare Workers Builds can connect directly to this GitHub repository and deploy on push.
 
-For the initial product gate the endpoint is intentionally read-only and unauthenticated because it exposes only public Pryzael workflow material. Authentication can be added after Chat-side MCP execution is proven if the deployment threat model requires it.
+The endpoint remains intentionally read-only and unauthenticated while it exposes only public Pryzael workflow material. Authentication should be added only if the threat model or future write/private-data capabilities require it.
 
-See [`docs/MCP.md`](docs/MCP.md) for the exact deployment and qualification path.
+See [`docs/MCP.md`](docs/MCP.md) for deployment and qualification.
 
 ## Validation
 
@@ -84,7 +97,7 @@ Cloudflare Worker validation after dependency installation:
 npm run check
 ```
 
-`npm run check` regenerates the derived MCP catalog and asks Wrangler to perform a dry-run bundle. Live qualification still requires a deployed `https://<worker>.workers.dev/mcp` endpoint and user-visible evidence that ChatGPT actually executed a Pryzael MCP tool. Plugin awareness alone is not sufficient.
+`npm run check` regenerates the derived MCP catalog, runs the Worker health/MCP-initialize smoke test, and asks Wrangler for a dry-run bundle. Live qualification still requires a deployed endpoint and user-visible evidence that ChatGPT executed the expected Pryzael action.
 
 ## Provenance
 

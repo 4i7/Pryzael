@@ -42,11 +42,13 @@ The design package should cover:
 7. verification strategy;
 8. rationale and rejected alternatives.
 
-### 3. Compare real alternatives when the choice is expensive
+### 3. Run the design-space gate before committing
 
-For consequential or hard-to-reverse decisions, compare at least two structurally different shapes when practical. Do not manufacture alternatives that differ only in naming.
+For consequential or hard-to-reverse decisions, consult `references/design-space-gate.md`. Check deletion/reuse before addition, compare a foundational redesign with an incremental patch when assumptions changed, and compare at least two structurally different shapes when more than one is viable.
 
-Prefer the design that hides complexity behind the smallest coherent public surface and preserves invariants with the least hidden state or duplicated policy.
+For novel or empirical forks, prefer concrete sketches/prototypes over asking the user to decide a fact that can be observed. Do not manufacture alternatives that differ only in naming.
+
+Select the design that preserves the invariant with the fewest authorities, least hidden/shared state, clearest dependency direction, and strongest verification path.
 
 ### 4. Implement against the sketch when implementation is in scope
 
@@ -56,6 +58,8 @@ Repeated deviations of the same shape are evidence that the architecture missed 
 
 ### 5. Compose only when needed
 
+- Use `how` to understand the current subsystem before redesign when the implementation model is unclear.
+- Use `why` when historical rationale or external constraints may explain a surprising shape.
 - Use `interrogate` to adversarially challenge a contested or expensive design.
 - Use `prove-it-works` after implementation to prove the final artifact.
 - If the overall task is large or multi-phase, let `figure-it-out` own orchestration; do not recursively turn `architect` into a project manager.
