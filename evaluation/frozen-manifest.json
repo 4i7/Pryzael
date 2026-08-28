@@ -1,1 +1,28 @@
-{"schema_version":"r4-frozen-manifest-v1","status":"FROZEN","files":{"evaluation/contract.json":{"sha256":"2e4eb34988650f8cf74996a1ddd4b8617e3fff38eccdea6bf17f143cb5c00304","bytes":7826},"evaluation/corpus/development.json":{"sha256":"70c4e2dc074331bf3717d4833d07bb11b7d0970171aa8b36fa792a7e43214bd2","bytes":10097},"evaluation/corpus/held-out.json":{"sha256":"eaf64e7e67634b62ae9110cbb2a3cf634bfeafc1f6e9c49ac551904c01baca60","bytes":10164},"evaluation/routing-cases.json":{"sha256":"85aab52d002b1916d31e03e6b563a5fac17980261b8a0b8f7ab9ed8b660e15e2","bytes":4768},"evaluation/trial-result.schema.json":{"sha256":"3db89a05e1ab23b32c887f2572a77e129f81481b2de77bfb2a63cc1692186a4b","bytes":4936}}}
+{
+  "schema_version": "r4-public-authority-manifest-v2",
+  "manifest_id": "pryzael-r4-public-authority-v2",
+  "status": "FROZEN",
+  "held_out_development_isolation": {
+    "repository_visible_payload_allowed": false,
+    "legacy_path": "evaluation/corpus/held-out.json",
+    "legacy_payload_status": "INVALIDATED_AND_REMOVED",
+    "hidden_packet_path_in_repository": null,
+    "public_commitment_path": "evaluation/qualification-commitment.json",
+    "public_commitment_status": "SECOND_STAGE_INDEPENDENT_FREEZE_REQUIRED_BEFORE_R4C",
+    "hidden_packet_created_in_r4_repair": false
+  },
+  "files": {
+    "evaluation/contract.json": {"git_blob_sha1": "91311f708c99d764e0c45093113e4b8e25ea55df"},
+    "evaluation/corpus/development.json": {"git_blob_sha1": "6e271f46fb20ebfa221ae20aa5782af2991328f2"},
+    "evaluation/routing-cases.json": {"git_blob_sha1": "de3af37367bf1c1a9da0c540408ff461ab79d0f3"},
+    "evaluation/trial-result.schema.json": {"git_blob_sha1": "77e1fc4184736febb1618f007856351684747440"},
+    "evaluation/qualification-packet.schema.json": {"git_blob_sha1": "549728eb81b59ec1e3409fa1cd81905410d84f46"},
+    "evaluation/qualification-commitment.schema.json": {"git_blob_sha1": "cca68b3ad203da9d4dc8e8d092fe24b918ca5501"},
+    "scripts/r4_lab.mjs": {"git_blob_sha1": "215fed4ffd98e11a294eb51d3113261926280fe8"},
+    "scripts/r4_lab_core.mjs": {"git_blob_sha1": "65fb2b5a384d6fc98333e7ba393e1deab31b1804"},
+    "scripts/r4_lab_qualification.mjs": {"git_blob_sha1": "1c2becde8d5d2bb8454429d84ed240e8e3c7255a"},
+    "scripts/r4_lab_trial.mjs": {"git_blob_sha1": "6cd5c47b0ad0d564f7ff940f6a61837c36ca60f0"},
+    "scripts/r4_lab_admission_rules.mjs": {"git_blob_sha1": "89efb1699b1c048a41fc4113cee05685f2403ff2"},
+    "scripts/r4_lab_admission.mjs": {"git_blob_sha1": "8d0c80f7c4f27945b9e736a8bc9b560b1bb07691"}
+  }
+}
