@@ -26,12 +26,12 @@ The MCP layer is a generated adapter, not a second workflow implementation.
 .codex-plugin/plugin.json
 skills/*/SKILL.md                 canonical workflow authority
 scripts/generate_mcp_catalog.mjs  build-time projection
-worker/index.ts                   stateless Streamable HTTP MCP
+worker/index.mjs                  stateless Streamable HTTP MCP
 wrangler.jsonc                    Cloudflare Workers deployment
 package.json
 ```
 
-Before Wrangler bundles the Worker, `scripts/generate_mcp_catalog.mjs` reads the eight canonical Skill packages and emits an ephemeral TypeScript catalog under `worker/generated/`. The deployed Worker therefore needs no filesystem, database, KV, D1, Durable Object, background process, OpenAI API call, or local PC.
+Before Wrangler bundles the Worker, `scripts/generate_mcp_catalog.mjs` reads the eight canonical Skill packages and emits an ephemeral JavaScript catalog under `worker/generated/`. The deployed Worker therefore needs no filesystem, database, KV, D1, Durable Object, background process, OpenAI API call, or local PC.
 
 The Worker exposes:
 
@@ -39,6 +39,8 @@ The Worker exposes:
 - `/health` — small service/version/tool-count health response.
 
 Each MCP tool description comes from the matching `SKILL.md` frontmatter, and its result returns that Skill body. Text resources under a Skill's `references/`, `assets/`, or `scripts/` directory are bundled at build time and can be requested on demand through the same tool.
+
+The runtime uses Cloudflare's minimal stateless MCP path directly through `@modelcontextprotocol/server`; it does not require the Agents SDK or Cloudflare-specific TypeScript definitions.
 
 See [`docs/MCP.md`](docs/MCP.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
@@ -79,12 +81,10 @@ python scripts/validate_skills.py
 Cloudflare Worker validation after dependency installation:
 
 ```text
-npm run generate:mcp-catalog
-npm run typecheck
-npx wrangler deploy --dry-run
+npm run check
 ```
 
-Live qualification requires a deployed `https://<worker>.workers.dev/mcp` endpoint and user-visible evidence that ChatGPT actually executed a Pryzael MCP tool. Plugin awareness alone is not sufficient.
+`npm run check` regenerates the derived MCP catalog and asks Wrangler to perform a dry-run bundle. Live qualification still requires a deployed `https://<worker>.workers.dev/mcp` endpoint and user-visible evidence that ChatGPT actually executed a Pryzael MCP tool. Plugin awareness alone is not sufficient.
 
 ## Provenance
 
