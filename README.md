@@ -2,12 +2,12 @@
 
 Portable engineering workflows for ChatGPT, Codex, and other Agent Skills/MCP-compatible clients, adapted from selected `pstack` skills.
 
-Pryzael keeps each `skills/<name>/SKILL.md` as the canonical workflow source and exposes the same sources through two runtime projections:
+Pryzael keeps each `skills/<name>/SKILL.md` as the canonical workflow source and exposes the same workflows through two projections:
 
 - **Agent Skills** for clients that natively load skills;
-- **read-only MCP workflow tools** for clients/surfaces that can call MCP tools.
+- **read-only remote MCP tools** served by a stateless Cloudflare Worker.
 
-The MCP layer is an adapter, not a second workflow implementation.
+The MCP layer is a generated adapter, not a second workflow implementation.
 
 ## Skills
 
@@ -20,32 +20,29 @@ The MCP layer is an adapter, not a second workflow implementation.
 - `sequence-verifiable-units` — split multi-step work into independently checkable transitions and verify before advancing.
 - `prove-it-works` — verify completion claims against the exact artifact and strongest available real behavior path.
 
-## Plugin shape
+## Runtime shape
 
 ```text
 .codex-plugin/plugin.json
-.mcp.json
-mcp/
-  server.mjs
-  server.test.mjs
-skills/
-  architect/
-  blast-radius/
-  figure-it-out/
-  fix-root-causes/
-  interrogate/
-  prove-it-works/
-  sequence-verifiable-units/
-  show-me-your-work/
+skills/*/SKILL.md                 canonical workflow authority
+scripts/generate_mcp_catalog.mjs  build-time projection
+worker/index.ts                   stateless Streamable HTTP MCP
+wrangler.jsonc                    Cloudflare Workers deployment
+package.json
 ```
 
-`.codex-plugin/plugin.json` declares both `skills` and `mcpServers`. `.mcp.json` starts a local stdio MCP server with Node.js. The server discovers every Skill at runtime, derives each MCP tool description from that Skill's frontmatter, and returns the Skill body when the tool is called. Package-local `references/`, `assets/`, and text `scripts/` remain on-demand resources exposed through the same workflow tool.
+Before Wrangler bundles the Worker, `scripts/generate_mcp_catalog.mjs` reads the eight canonical Skill packages and emits an ephemeral TypeScript catalog under `worker/generated/`. The deployed Worker therefore needs no filesystem, database, KV, D1, Durable Object, background process, OpenAI API call, or local PC.
 
-The MCP server performs no writes, network requests, authentication, database access, or model/API calls. It only reads the installed Pryzael package. A public hosted Pryzael service is not required.
+The Worker exposes:
 
-See [`docs/MCP.md`](docs/MCP.md) for local and ChatGPT connection instructions and [`ARCHITECTURE.md`](ARCHITECTURE.md) for the authority boundaries.
+- `/mcp` — stateless MCP Streamable HTTP endpoint;
+- `/health` — small service/version/tool-count health response.
 
-## Runtime model
+Each MCP tool description comes from the matching `SKILL.md` frontmatter, and its result returns that Skill body. Text resources under a Skill's `references/`, `assets/`, or `scripts/` directory are bundled at build time and can be requested on demand through the same tool.
+
+See [`docs/MCP.md`](docs/MCP.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## Authority boundary
 
 Each skill remains independently valid:
 
@@ -58,17 +55,17 @@ skills/<name>/
   LICENSE.pstack.txt
 ```
 
-The `name` and `description` in each `SKILL.md` remain the discovery contract. MCP tool metadata is generated from them instead of duplicating trigger text in server code.
+The `name`, `description`, and workflow body in `SKILL.md` remain authoritative. Do not hand-maintain a second copy in Worker code. MCP routing metadata and workflow content are regenerated from these files at build/deploy time.
 
-When a Skill body references a package-local supporting file, the MCP tool reports the available resource path. Calling that same workflow tool again with `resource` set to the reported path returns the supporting text. This preserves progressive disclosure without requiring the remote model to access the local filesystem directly.
+The MCP server itself performs no repository mutation or downstream tool action. If a returned Pryzael workflow calls for GitHub, browser, filesystem, or execution capabilities, those remain capabilities of the active ChatGPT/Codex host.
 
-## ChatGPT Web path
+## Cloudflare deployment
 
-For ChatGPT surfaces that can call custom MCP plugins, Pryzael can run locally and be connected through an MCP endpoint. The preferred no-hosting development path is OpenAI's Secure MCP Tunnel: the MCP server and tunnel client run only while Pryzael is in use, and no third-party hosted runtime is required.
+Pryzael targets a stateless Cloudflare Worker so ChatGPT can reach the MCP endpoint without a local machine or tunnel. Cloudflare Workers Builds can connect directly to this GitHub repository and deploy on push.
 
-Do not infer MCP execution merely because a plugin appears installed or is mentioned by the model. Qualification should rely only on user-visible tool execution evidence available on the actual ChatGPT surface.
+For the initial product gate the endpoint is intentionally read-only and unauthenticated because it exposes only public Pryzael workflow material. Authentication can be added after Chat-side MCP execution is proven if the deployment threat model requires it.
 
-See [`docs/WEBCHATGPT.md`](docs/WEBCHATGPT.md) and [`docs/MCP.md`](docs/MCP.md).
+See [`docs/MCP.md`](docs/MCP.md) for the exact deployment and qualification path.
 
 ## Validation
 
@@ -79,13 +76,15 @@ skills-ref validate ./skills/architect
 python scripts/validate_skills.py
 ```
 
-MCP protocol/adapter smoke test (Node.js, no npm dependencies):
+Cloudflare Worker validation after dependency installation:
 
 ```text
-node --test mcp/server.test.mjs
+npm run generate:mcp-catalog
+npm run typecheck
+npx wrangler deploy --dry-run
 ```
 
-The local checks do not replace OpenAI's plugin ingestion/submission validation or live ChatGPT testing.
+Live qualification requires a deployed `https://<worker>.workers.dev/mcp` endpoint and user-visible evidence that ChatGPT actually executed a Pryzael MCP tool. Plugin awareness alone is not sufficient.
 
 ## Provenance
 
