@@ -1,0 +1,43 @@
+name: R1 structural qualification
+
+on:
+  pull_request:
+    paths:
+      - ".codex-plugin/**"
+      - "skills/**"
+      - "scripts/**"
+      - "tests/**"
+      - "worker/**"
+      - "package.json"
+      - "wrangler.jsonc"
+      - ".github/workflows/r1-qualification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned upstream Agent Skills validator
+        run: python -m pip install "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref"
+
+      - name: Install current project dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Run the single R1 qualification command
+        run: npm run check
