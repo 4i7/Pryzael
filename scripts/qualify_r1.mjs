@@ -226,8 +226,8 @@ function main() {
   establishLockedDependencies();
   const wranglerBin = packageBin("wrangler", "wrangler");
 
-  run(python, ["scripts/validate_skills.py"]);
-  run(python, ["-m", "unittest", "tests/test_validate_skills.py"]);
+  run(process.execPath, ["scripts/validate_skills.mjs"]);
+  run(process.execPath, ["--test", "tests/skill-package-contract.test.mjs"]);
   run(process.execPath, ["--test", "tests/qualification-gates.test.mjs"]);
 
   const upstreamSpecValidation = establishPinnedUpstreamValidation(python, skillNames);
@@ -302,6 +302,7 @@ function main() {
     deploymentIdentity: "NOT_USED",
     checks: {
       canonicalPackageValidation: "PASS",
+      parserContractFixtures: "PASS",
       pinnedIndependentUpstreamValidation: "PASS",
       validatorRegressionTests: "PASS",
       generation: "PASS",
