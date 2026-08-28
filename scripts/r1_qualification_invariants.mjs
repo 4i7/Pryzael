@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+import { ordinalCompare } from "./deterministic_order.mjs";
+
+export { ordinalCompare };
+
 export const PINNED_SKILLS_REF = Object.freeze({
   repository: "https://github.com/agentskills/agentskills.git",
   subdirectory: "skills-ref",
@@ -17,10 +21,6 @@ export const FROZEN_R1_PROVENANCE = Object.freeze({
 });
 
 export const RESOURCE_ROOTS = Object.freeze(["references", "assets", "scripts"]);
-
-export function ordinalCompare(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
 
 export function sha256(buffer) {
   return crypto.createHash("sha256").update(buffer).digest("hex");

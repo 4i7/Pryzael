@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ordinalCompare } from "./r1_qualification_invariants.mjs";
+import { ordinalCompare } from "./deterministic_order.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
