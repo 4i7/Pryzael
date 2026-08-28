@@ -1,0 +1,152 @@
+{
+  "valid": [
+    {
+      "id": "quoted-description-and-metadata",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: \"A: quoted description.\"\nmetadata:\n  source: \"https://example.test/a:b\"\n  target: chatgpt\n# frontmatter comment\n---\n\n# Demo\n\nBody.\n",
+      "expected": {
+        "name": "demo-skill",
+        "description": "A: quoted description.",
+        "body": "# Demo\n\nBody.",
+        "keys": ["description", "metadata", "name"],
+        "metadataKeys": ["source", "target"]
+      }
+    },
+    {
+      "id": "unquoted-colon-remains-scalar-content",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: Unquoted: colon remains content\n---\n\nBody\n",
+      "expected": {
+        "name": "demo-skill",
+        "description": "Unquoted: colon remains content",
+        "body": "Body",
+        "keys": ["description", "name"],
+        "metadataKeys": []
+      }
+    },
+    {
+      "id": "single-quoted-scalar",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: 'Owner''s choice'\n---\n\nBody\n",
+      "expected": {
+        "name": "demo-skill",
+        "description": "Owner's choice",
+        "body": "Body",
+        "keys": ["description", "name"],
+        "metadataKeys": []
+      }
+    },
+    {
+      "id": "crlf-normalization",
+      "directory": "demo-skill",
+      "markdown": "---\r\nname: demo-skill\r\ndescription: \"CRLF fixture.\"\r\n---\r\n\r\nLine one.\r\nLine two.\r\n",
+      "expected": {
+        "name": "demo-skill",
+        "description": "CRLF fixture.",
+        "body": "Line one.\nLine two.",
+        "keys": ["description", "name"],
+        "metadataKeys": []
+      }
+    },
+    {
+      "id": "empty-optional-top-level-value",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: \"Empty optional value remains accepted.\"\ncompatibility:\n---\n\nBody\n",
+      "expected": {
+        "name": "demo-skill",
+        "description": "Empty optional value remains accepted.",
+        "body": "Body",
+        "keys": ["compatibility", "description", "name"],
+        "metadataKeys": []
+      }
+    },
+    {
+      "id": "duplicate-semantic-field-remains-last-wins",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: first\ndescription: second\n---\n\nBody\n",
+      "expected": {
+        "name": "demo-skill",
+        "description": "second",
+        "body": "Body",
+        "keys": ["description", "name"],
+        "metadataKeys": []
+      }
+    }
+  ],
+  "invalidParser": [
+    {
+      "id": "missing-opening-delimiter",
+      "directory": "demo-skill",
+      "markdown": "name: demo-skill\ndescription: missing delimiter\n---\nBody\n",
+      "error": "missing opening YAML frontmatter delimiter"
+    },
+    {
+      "id": "whitespace-opening-delimiter-is-not-canonical",
+      "directory": "demo-skill",
+      "markdown": " ---\nname: demo-skill\ndescription: whitespace delimiter\n---\nBody\n",
+      "error": "missing opening YAML frontmatter delimiter"
+    },
+    {
+      "id": "unterminated-frontmatter",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: unterminated\nBody\n",
+      "error": "missing closing YAML frontmatter delimiter"
+    },
+    {
+      "id": "invalid-top-level-line",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: valid\nnot-a-pair\n---\nBody\n",
+      "error": "invalid top-level YAML line"
+    },
+    {
+      "id": "unsupported-nesting",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription:\n  nested: unsupported\n---\nBody\n",
+      "error": "unsupported nested YAML"
+    },
+    {
+      "id": "invalid-metadata-line",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: valid\nmetadata:\n  not-a-pair\n---\nBody\n",
+      "error": "invalid metadata YAML line"
+    },
+    {
+      "id": "invalid-double-quoted-semantic-scalar",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: \"bad\\q\"\n---\nBody\n",
+      "error": "invalid description scalar"
+    }
+  ],
+  "invalidValidation": [
+    {
+      "id": "unsupported-top-level-key",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: valid\nunknown-key: value\n---\nBody\n",
+      "error": "unsupported top-level frontmatter keys"
+    },
+    {
+      "id": "directory-name-mismatch",
+      "directory": "demo-skill",
+      "markdown": "---\nname: other-skill\ndescription: valid\n---\nBody\n",
+      "error": "does not match directory"
+    },
+    {
+      "id": "invalid-skill-name",
+      "directory": "Demo_Skill",
+      "markdown": "---\nname: Demo_Skill\ndescription: valid\n---\nBody\n",
+      "error": "invalid skill name"
+    },
+    {
+      "id": "missing-description",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription:\n---\nBody\n",
+      "error": "missing description"
+    },
+    {
+      "id": "broken-explicit-resource",
+      "directory": "demo-skill",
+      "markdown": "---\nname: demo-skill\ndescription: valid\n---\nUse `references/missing.md`.\n",
+      "error": "broken local resource reference: references/missing.md"
+    }
+  ]
+}
