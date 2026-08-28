@@ -5,7 +5,7 @@ on:
     paths:
       - "evaluation/**"
       - "docs/EVALUATION.md"
-      - "scripts/r4_lab.mjs"
+      - "scripts/r4_lab*.mjs"
       - "scripts/validate_r4_lab.mjs"
       - "tests/r4-lab.test.mjs"
       - "package.json"
@@ -35,5 +35,5 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Run frozen R4 Lab qualification
-        run: npm run qualify:r4-lab
+      - name: Run full qualification chain
+        run: npm run check
