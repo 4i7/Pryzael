@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4i7/Pryzael/evaluation/qualification-packet.schema.json",
+  "title": "Pryzael hidden R4 qualification packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "qualification_set_id",
+    "tasks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "r4-qualification-packet-v1"
+    },
+    "qualification_set_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "task_id",
+          "partition",
+          "family",
+          "risk",
+          "prompt",
+          "observable_success_predicates",
+          "critical_failure_predicates",
+          "autonomy_focus",
+          "efficiency_focus",
+          "digest"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "partition": {
+            "const": "QUALIFICATION"
+          },
+          "family": {
+            "type": "string",
+            "minLength": 1
+          },
+          "risk": {
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 40
+          },
+          "observable_success_predicates": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "kind",
+                "statement"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "enum": [
+                    "OBJECTIVE",
+                    "SUBJECTIVE"
+                  ]
+                },
+                "statement": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "critical_failure_predicates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "kind",
+                "statement"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "enum": [
+                    "OBJECTIVE",
+                    "SUBJECTIVE"
+                  ]
+                },
+                "statement": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "autonomy_focus": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "efficiency_focus": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "replanning_event": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "prior_plan_or_assumption",
+              "new_evidence",
+              "material_invalidation_required"
+            ],
+            "properties": {
+              "prior_plan_or_assumption": {
+                "type": "string",
+                "minLength": 1
+              },
+              "new_evidence": {
+                "type": "string",
+                "minLength": 1
+              },
+              "material_invalidation_required": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
