@@ -181,6 +181,7 @@ function main() {
   const python = findPython();
 
   run(python, ["scripts/validate_skills.py"]);
+  run(python, ["-m", "unittest", "tests/test_validate_skills.py"]);
   const upstreamSpecValidation = runUpstreamValidation(skillNames);
   const catalog = deterministicCatalog();
 
@@ -215,6 +216,7 @@ function main() {
     deploymentIdentity: "NOT_USED",
     checks: {
       canonicalPackageValidation: "PASS",
+      validatorDefectClassRegression: "PASS",
       deterministicRebuild: "PASS",
       canonicalProjectionParity: "PASS",
       workerProtocolMatrix: "PASS",
