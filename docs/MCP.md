@@ -35,10 +35,12 @@ The generated catalog is disposable output. The canonical source is always the S
 
 ## Tool model
 
-One MCP tool is generated per Skill:
+One MCP tool is generated per top-level Skill package:
 
 | Skill | MCP tool |
 |---|---|
+| `how` | `how` |
+| `why` | `why` |
 | `architect` | `architect` |
 | `blast-radius` | `blast_radius` |
 | `figure-it-out` | `figure_it_out` |
@@ -47,6 +49,8 @@ One MCP tool is generated per Skill:
 | `prove-it-works` | `prove_it_works` |
 | `sequence-verifiable-units` | `sequence_verifiable_units` |
 | `show-me-your-work` | `show_me_your_work` |
+
+Specialized procedures stay under the owning Skill's `references/` directory so capability growth does not automatically grow the routing surface.
 
 The tool description is the corresponding Skill frontmatter `description`. A normal call returns the Skill body as workflow guidance.
 
@@ -70,17 +74,17 @@ Pryzael uses a stateless Worker rather than a local stdio process or tunnel beca
 
 The deployment deliberately does not use Durable Objects, KV, D1, R2, Queues, scheduled jobs, hosted databases, OpenAI API calls, a local tunnel, or an always-on PC. The only runtime is the Worker request itself.
 
-Cloudflare's current minimal stateless MCP example uses `@modelcontextprotocol/server` directly. Pryzael follows that smaller path rather than depending on the Agents SDK. The Worker is plain JavaScript, so deployment also does not depend on Cloudflare's separately versioned TypeScript definitions.
+Cloudflare's minimal stateless MCP path uses `@modelcontextprotocol/server` directly. Pryzael follows that smaller path rather than depending on the Agents SDK. The Worker is plain JavaScript, so deployment also does not depend on Cloudflare's separately versioned TypeScript definitions.
 
 ## Build path
 
 Wrangler runs the custom build command declared in `wrangler.jsonc` before bundling:
 
 ```text
-npm run generate:mcp-catalog
+node scripts/generate_mcp_catalog.mjs
 ```
 
-That command reads the canonical Skill files and generates `worker/generated/catalog.mjs`. The generated file is not an independent authority and should not be edited by hand.
+The generator reads the canonical Skill files, reads the Pryzael version from `.codex-plugin/plugin.json`, and generates `worker/generated/catalog.mjs`. The generated file is not an independent authority and should not be edited by hand.
 
 The runtime dependency surface is intentionally small:
 
@@ -93,16 +97,14 @@ Wrangler is a build/deploy dependency only.
 
 ## GitHub -> Cloudflare deployment
 
-The preferred deployment path is Cloudflare Workers Builds connected directly to `4i7/Pryzael`:
+The stable deployment path is Cloudflare Workers Builds connected directly to `4i7/Pryzael` with `main` as the production branch. Feature branches may be built/qualified separately before merge.
 
 1. In Cloudflare Dashboard open **Workers & Pages** / **Compute**.
-2. Choose **Create application** / **Import a repository**.
-3. Connect GitHub and select `4i7/Pryzael`.
-4. Set the Worker project name to `pryzael` so it matches `wrangler.jsonc`.
-5. Set the production branch to `mcp/read-only-workflow-bridge` while qualification is in progress. Do not point production at `main` yet.
-6. Use the repository root as the project root.
-7. Use `npx wrangler deploy` as the deploy command. Wrangler runs the configured catalog generation automatically.
-8. Deploy and record the user-visible `*.workers.dev` hostname.
+2. Choose the `pryzael` Worker project.
+3. Confirm GitHub repository `4i7/Pryzael` and production branch `main` for the stable deployment.
+4. Use the repository root as the project root.
+5. Use `npx wrangler deploy` as the production deploy command. Wrangler runs the configured catalog generation automatically.
+6. Deploy and record the user-visible `*.workers.dev` hostname.
 
 The resulting MCP URL is:
 
@@ -120,9 +122,7 @@ Do not guess either hostname before Cloudflare displays it.
 
 ## Authentication decision
 
-The initial product-gate deployment is unauthenticated. It serves only public Pryzael workflow text and performs no mutation or external action. This minimizes moving parts while determining whether the target Chat surface can actually execute the MCP tools.
-
-If Chat-side execution succeeds and the service is retained, reassess exposure and add OAuth or another supported authorization layer if needed.
+The current endpoint is unauthenticated because it serves only public Pryzael workflow text and performs no mutation or external action. Add OAuth or another supported authorization layer only if private data/write capabilities or the deployment threat model require it.
 
 ## Free-plan boundary
 
@@ -138,12 +138,16 @@ After dependency installation:
 npm run check
 ```
 
-This regenerates the catalog and runs `wrangler deploy --dry-run`. Passing the dry run proves only that the current source can be bundled; it does not prove the live endpoint or ChatGPT product path.
+This regenerates the catalog, runs the Worker health/MCP-initialize smoke test, and runs `wrangler deploy --dry-run`. Passing only local/static checks does not prove the live endpoint or ChatGPT product path.
 
 ## ChatGPT qualification
 
-Create a ChatGPT Plugin connection using the exact `/mcp` URL shown by the deployed Worker.
+The supported normal-Chat contract is:
 
-The product gate is satisfied only by ordinary user-visible evidence that ChatGPT actually executed a Pryzael MCP tool and used its result. Plugin existence/awareness alone is not execution proof.
+1. select the Pryzael Plugin/App at the app level;
+2. describe the engineering task naturally without naming an individual action;
+3. observe ChatGPT select and execute the relevant Pryzael MCP action.
 
-Do not require or infer hidden package IDs, hidden routing state, private server-side traces unavailable to an ordinary user, or any other practically unobservable data as evidence.
+When top-level actions change, rerun representative old and new intents. Plugin-unselected automatic activation is optional host behavior and is not the authority for Pryzael internal routing quality.
+
+Qualification authority must remain ordinary user-visible evidence. Do not require or infer hidden package IDs, hidden routing state, private server-side traces unavailable to an ordinary user, or other practically unobservable data.

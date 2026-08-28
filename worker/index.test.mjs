@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import worker from "./index.mjs";
+import { CATALOG, PRYZAEL_VERSION } from "./generated/catalog.mjs";
 
 test("health and legacy MCP initialize reach the deployed handler contract", async () => {
   const health = await worker.fetch(new Request("https://pryzael.example/health"));
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), {
     service: "pryzael-mcp",
-    version: "0.2.0",
-    tools: 8,
+    version: PRYZAEL_VERSION,
+    tools: CATALOG.length,
   });
 
   const initialize = await worker.fetch(
