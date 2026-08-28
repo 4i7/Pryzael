@@ -7,7 +7,7 @@
     "generate:mcp-catalog": "node scripts/generate_mcp_catalog.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "npm run generate:mcp-catalog && wrangler deploy --dry-run"
+    "check": "node scripts/generate_mcp_catalog.mjs && wrangler deploy --dry-run"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
