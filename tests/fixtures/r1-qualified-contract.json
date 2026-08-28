@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "provenance": {
+    "frozenBaseSha": "fe1e304c34f6594c9c5cedbd1e6597dad08754c7",
+    "reviewedQualificationHeadSha": "19df52175fcc94e99ee14ac7993c59e28562aa2c",
+    "skillsTreeGitSha": "4395ef86a309ed610f4860f47284d0e4da572914",
+    "pluginVersion": "0.3.0"
+  },
+  "canonicalPackageDigests": {
+    "architect": "ff6574bbc517029af0a0d422c79b31b73a2671fd8eafb3b30d0344b177825d25",
+    "blast-radius": "b7b97addcf71aaadcd1342b0bcf8c8e3057a2257f0b616f4234e373fad4589b0",
+    "figure-it-out": "2463975e5048b61d41ebda2036d02f10bc59413e7a5b19e6f815563541c5444e",
+    "fix-root-causes": "b8d19e1bf12d320a86b6175387832c385c04f771d763a348c65fdf454ae24eac",
+    "how": "ad68f0c171d4110da1186506667eab51e61d18ba48394af76f14a2d23f1f9315",
+    "interrogate": "c3d961a9bdb7ea0a026ff5f8242f71ba5c819858eb0d106cdf2a718c3333b118",
+    "prove-it-works": "4be2cab3c4152cb59f74a4b597c3ef3f4d953c927515a10c8f61c34f1e7d89d5",
+    "sequence-verifiable-units": "c536fd76bb255cd10602839e44f4f14fc4540ab42a1024998efd55673bff9226",
+    "show-me-your-work": "1bf421f7c3b8efa363581b2c3787c69a7653d8993cddadf50151b0b0970b66c4",
+    "why": "ef8bee020b4a9697da20d89451f9ec06227478d1dbf2abab20b90be029449780"
+  },
+  "generatedCatalog": {
+    "digest": "56df042ca6b2c08b608f608d718e263777d7041babc6138e91a26d1f20e8cfa5",
+    "bytes": 48433
+  }
+}

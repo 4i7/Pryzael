@@ -4,3 +4,5 @@ dist/
 node_modules/
 worker/generated/
 .wrangler/
+.qualification-dist/
+.qualification-python/

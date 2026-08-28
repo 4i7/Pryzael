@@ -1,0 +1,56 @@
+name: R1 structural qualification
+
+on:
+  pull_request:
+    paths:
+      - ".codex-plugin/**"
+      - "skills/**"
+      - "scripts/**"
+      - "tests/**"
+      - "worker/**"
+      - "package.json"
+      - "package-lock.json"
+      - "wrangler.jsonc"
+      - ".github/workflows/r1-qualification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+
+      - name: Prove exact candidate checkout
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Seed stale dependency environment
+        shell: bash
+        run: |
+          mkdir -p node_modules
+          printf 'stale dependency fixture\n' > node_modules/pryzael-r1-stale-marker
+
+      - name: Run standalone fail-closed R1 qualification
+        run: npm run check
+
+      - name: Prove lockfile install replaced stale dependency environment
+        shell: bash
+        run: test ! -e node_modules/pryzael-r1-stale-marker

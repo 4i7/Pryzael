@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ordinalCompare } from "./deterministic_order.mjs";
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
 const OUTPUT = path.join(ROOT, "worker", "generated", "catalog.mjs");
@@ -60,7 +62,7 @@ function collectResources(skillDir) {
     const stack = [root];
     while (stack.length > 0) {
       const current = stack.pop();
-      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => ordinalCompare(a.name, b.name))) {
         if (entry.isSymbolicLink()) continue;
         const absolute = path.join(current, entry.name);
         if (entry.isDirectory()) {
@@ -73,7 +75,7 @@ function collectResources(skillDir) {
       }
     }
   }
-  return Object.fromEntries(Object.entries(resources).sort(([a], [b]) => a.localeCompare(b)));
+  return Object.fromEntries(Object.entries(resources).sort(([a], [b]) => ordinalCompare(a, b)));
 }
 
 const pluginManifest = JSON.parse(fs.readFileSync(PLUGIN_MANIFEST, "utf8"));
@@ -83,7 +85,9 @@ if (typeof pluginManifest.version !== "string" || pluginManifest.version.length 
 
 const catalog = [];
 const toolNames = new Set();
-for (const entry of fs.readdirSync(SKILLS_DIR, { withFileTypes: true }).filter((item) => item.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+for (const entry of fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
+  .filter((item) => item.isDirectory())
+  .sort((a, b) => ordinalCompare(a.name, b.name))) {
   const skillDir = path.join(SKILLS_DIR, entry.name);
   const skill = parseSkill(fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8"), entry.name);
   const toolName = skill.name.replace(/-/g, "_");

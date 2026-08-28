@@ -4,9 +4,12 @@
   "type": "module",
   "scripts": {
     "generate:mcp-catalog": "node scripts/generate_mcp_catalog.mjs",
+    "validate:skills": "python scripts/validate_skills.py",
+    "test:conformance": "node --test tests/structural-conformance.test.mjs worker/index.test.mjs",
+    "qualify:r1": "node scripts/qualify_r1.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "wrangler deploy --dry-run"
+    "check": "npm run qualify:r1"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
