@@ -28,8 +28,10 @@ function createServer() {
         },
       },
       async ({ resource }) => {
+        const resources = skill.resources as Readonly<Record<string, string>>;
+
         if (resource !== undefined) {
-          const text = skill.resources[resource as keyof typeof skill.resources];
+          const text = resources[resource];
           if (typeof text !== "string") {
             throw new Error(`Unknown resource for ${skill.name}: ${resource}`);
           }
@@ -47,7 +49,7 @@ function createServer() {
           };
         }
 
-        const availableResources = Object.keys(skill.resources);
+        const availableResources = Object.keys(resources);
         const resourceHint = availableResources.length === 0
           ? ""
           : `\n\nAvailable package-local resources: ${availableResources.join(", ")}. If needed, call this same tool again with the exact resource path.`;
