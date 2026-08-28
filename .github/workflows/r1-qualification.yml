@@ -42,11 +42,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pinned upstream Agent Skills validator
-        run: python -m pip install "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref"
+      - name: Seed stale dependency environment
+        shell: bash
+        run: |
+          mkdir -p node_modules
+          printf 'stale dependency fixture\n' > node_modules/pryzael-r1-stale-marker
 
-      - name: Install locked project dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Run the single R1 qualification command
+      - name: Run standalone fail-closed R1 qualification
         run: npm run check
+
+      - name: Prove lockfile install replaced stale dependency environment
+        shell: bash
+        run: test ! -e node_modules/pryzael-r1-stale-marker

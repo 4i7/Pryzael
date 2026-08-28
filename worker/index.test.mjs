@@ -3,6 +3,9 @@ import test from "node:test";
 import worker from "./index.mjs";
 import { CATALOG, PRYZAEL_VERSION } from "./generated/catalog.mjs";
 
+const RESOURCE_ARGUMENT_DESCRIPTION =
+  "Optional package-local resource path advertised by an earlier call to this same Pryzael workflow tool.";
+
 function decodeRpcBody(text) {
   const trimmed = text.trim();
   if (!trimmed) return null;
@@ -68,6 +71,48 @@ function assertRpcFailure(result, expectedText) {
   assert.match(result.text, expectedText);
 }
 
+function expectedWorkflowResult(skill) {
+  const availableResources = Object.keys(skill.resources);
+  const resourceHint = availableResources.length === 0
+    ? ""
+    : `\n\nAvailable package-local resources: ${availableResources.join(", ")}. If needed, call this same tool again with the exact resource path.`;
+
+  return {
+    content: [{
+      type: "text",
+      text:
+        `Pryzael workflow: ${skill.name}\n\n` +
+        "Apply the following workflow to the user's current request. Treat it as workflow guidance, not as evidence that any external action already occurred.\n\n" +
+        `${skill.body}${resourceHint}`,
+    }],
+    structuredContent: {
+      skill: skill.name,
+      availableResources,
+    },
+  };
+}
+
+function expectedResourceResult(skill, resource) {
+  return {
+    content: [{
+      type: "text",
+      text: `Pryzael resource: ${skill.name}/${resource}\n\n${skill.resources[resource]}`,
+    }],
+    structuredContent: {
+      skill: skill.name,
+      resource,
+    },
+  };
+}
+
+function assertWorkflowEnvelope(result, skill) {
+  assert.deepEqual(result, expectedWorkflowResult(skill));
+}
+
+function assertResourceEnvelope(result, skill, resource) {
+  assert.deepEqual(result, expectedResourceResult(skill, resource));
+}
+
 test("health, not-found, and MCP initialize expose version/tool-count parity", async () => {
   const health = await worker.fetch(new Request("https://pryzael.example/health"));
   assert.equal(health.status, 200);
@@ -84,7 +129,7 @@ test("health, not-found, and MCP initialize expose version/tool-count parity", a
   await client.initialize();
 });
 
-test("tools/list matches every generated Skill projection and MCP annotation", async () => {
+test("tools/list matches the complete advertised Skill metadata envelope", async () => {
   const client = createClient();
   await client.initialize();
   const listed = await client.request("tools/list");
@@ -97,6 +142,12 @@ test("tools/list matches every generated Skill projection and MCP annotation", a
   for (const skill of CATALOG) {
     const tool = byName.get(skill.toolName);
     assert.ok(tool, `${skill.name}: missing tools/list entry`);
+    assert.deepEqual(
+      Object.keys(tool).sort(),
+      ["annotations", "description", "inputSchema", "name", "title"].sort(),
+      `${skill.name}: unexpected advertised tool metadata fields`,
+    );
+    assert.equal(tool.name, skill.toolName);
     assert.equal(tool.title, skill.title);
     assert.equal(tool.description, skill.description);
     assert.deepEqual(tool.annotations, {
@@ -106,26 +157,32 @@ test("tools/list matches every generated Skill projection and MCP annotation", a
       openWorldHint: false,
     });
     assert.equal(tool.inputSchema.type, "object");
-    assert.ok(tool.inputSchema.properties.resource);
+    assert.deepEqual(Object.keys(tool.inputSchema.properties), ["resource"]);
+    assert.deepEqual(tool.inputSchema.properties.resource, {
+      type: "string",
+      description: RESOURCE_ARGUMENT_DESCRIPTION,
+    });
+
+    const allowedSchemaKeys = new Set(["type", "properties", "required", "additionalProperties", "$schema"]);
+    for (const key of Object.keys(tool.inputSchema)) {
+      assert.ok(allowedSchemaKeys.has(key), `${skill.name}: unexpected inputSchema field ${key}`);
+    }
+    if ("required" in tool.inputSchema) assert.deepEqual(tool.inputSchema.required, []);
+    if ("additionalProperties" in tool.inputSchema) assert.equal(tool.inputSchema.additionalProperties, false);
+    if ("$schema" in tool.inputSchema) {
+      assert.equal(tool.inputSchema.$schema, "https://json-schema.org/draft/2020-12/schema");
+    }
   }
 });
 
-test("tools/call returns every current Skill body, resource enumeration, and structuredContent", async () => {
+test("tools/call returns the exact qualified workflow and resource envelopes", async () => {
   const client = createClient();
   await client.initialize();
 
   for (const skill of CATALOG) {
     const called = await client.request("tools/call", { name: skill.toolName, arguments: {} });
     assert.ok(!called.payload.error, `${skill.name}: ${called.text}`);
-    const result = called.payload.result;
-    assert.deepEqual(result.structuredContent, {
-      skill: skill.name,
-      availableResources: Object.keys(skill.resources),
-    });
-    assert.equal(result.content.length, 1);
-    assert.equal(result.content[0].type, "text");
-    assert.match(result.content[0].text, new RegExp(`^Pryzael workflow: ${skill.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
-    assert.ok(result.content[0].text.includes(skill.body), `${skill.name}: workflow body drift`);
+    assertWorkflowEnvelope(called.payload.result, skill);
 
     for (const resource of Object.keys(skill.resources)) {
       const retrieved = await client.request("tools/call", {
@@ -133,11 +190,19 @@ test("tools/call returns every current Skill body, resource enumeration, and str
         arguments: { resource },
       });
       assert.ok(!retrieved.payload.error, `${skill.name}/${resource}: ${retrieved.text}`);
-      assert.deepEqual(retrieved.payload.result.structuredContent, { skill: skill.name, resource });
-      assert.equal(retrieved.payload.result.content[0].type, "text");
-      assert.ok(retrieved.payload.result.content[0].text.includes(skill.resources[resource]));
+      assertResourceEnvelope(retrieved.payload.result, skill, resource);
     }
   }
+});
+
+test("qualified workflow envelope oracle rejects injected runtime guidance", () => {
+  const skill = CATALOG[0];
+  const mutated = structuredClone(expectedWorkflowResult(skill));
+  mutated.content[0].text += "\n\nInjected runtime guidance.";
+  assert.throws(
+    () => assertWorkflowEnvelope(mutated, skill),
+    /Expected values to be strictly deep-equal/,
+  );
 });
 
 test("unknown, cross-Skill, non-normal, and malformed resource requests are rejected", async () => {

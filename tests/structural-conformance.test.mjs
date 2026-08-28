@@ -4,11 +4,21 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import {
+  assertFrozenR1Contract,
+  canonicalPackageIdentity,
+  catalogFileIdentity,
+  ordinalCompare,
+} from "../scripts/r1_qualification_invariants.mjs";
 import { CATALOG, PRYZAEL_VERSION } from "../worker/generated/catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
 const PLUGIN_MANIFEST = path.join(ROOT, ".codex-plugin", "plugin.json");
+const CATALOG_PATH = path.join(ROOT, "worker", "generated", "catalog.mjs");
+const FROZEN_CONTRACT = JSON.parse(
+  fs.readFileSync(path.join(ROOT, "tests", "fixtures", "r1-qualified-contract.json"), "utf8"),
+);
 const RESOURCE_ROOTS = ["references", "assets", "scripts"];
 const TEXT_EXTENSIONS = new Set([
   ".md", ".txt", ".tsv", ".csv", ".json", ".yaml", ".yml", ".toml",
@@ -54,7 +64,7 @@ function collectCanonicalResources(skillDir) {
     const stack = [root];
     while (stack.length > 0) {
       const current = stack.pop();
-      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => ordinalCompare(a.name, b.name))) {
         if (entry.isSymbolicLink()) continue;
         const absolute = path.join(current, entry.name);
         if (entry.isDirectory()) {
@@ -67,14 +77,14 @@ function collectCanonicalResources(skillDir) {
       }
     }
   }
-  return Object.fromEntries(Object.entries(resources).sort(([a], [b]) => a.localeCompare(b)));
+  return Object.fromEntries(Object.entries(resources).sort(([a], [b]) => ordinalCompare(a, b)));
 }
 
 function skillDirectories() {
   return fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b));
+    .sort(ordinalCompare);
 }
 
 test("plugin manifest and generated version stay aligned", () => {
@@ -136,4 +146,23 @@ test("current resource envelope is characterized without imposing a new size lim
   const totalBytes = resources.reduce((sum, item) => sum + item.bytes, 0);
   const maxBytes = resources.reduce((max, item) => Math.max(max, item.bytes), 0);
   assert.ok(totalBytes >= maxBytes);
+});
+
+test("canonical packages and generated projection match the frozen R1 qualification contract", () => {
+  const manifest = JSON.parse(fs.readFileSync(PLUGIN_MANIFEST, "utf8"));
+  const names = skillDirectories();
+  const packageIdentities = Object.fromEntries(
+    names.map((name) => [name, canonicalPackageIdentity(path.join(SKILLS_DIR, name))]),
+  );
+
+  assert.equal(
+    assertFrozenR1Contract({
+      fixture: FROZEN_CONTRACT,
+      pluginVersion: manifest.version,
+      skillNames: names,
+      packageIdentities,
+      catalogIdentity: catalogFileIdentity(CATALOG_PATH),
+    }),
+    true,
+  );
 });

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight Pryzael package checks. Use skills-ref for authoritative validation."""
+"""Lightweight Pryzael package checks. Use pinned skills-ref for independent validation."""
 
 from __future__ import annotations
 
@@ -11,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 ALLOWED_TOP = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-RESOURCE_RE = re.compile(r"(?:references|assets|scripts)/[A-Za-z0-9._/-]+")
+RESOURCE_PATH_RE = re.compile(r"^(?:references|assets|scripts)/[A-Za-z0-9._/-]+$")
+INLINE_CODE_RE = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
+MARKDOWN_LINK_RE = re.compile(
+    r"\[[^\]\n]*\]\(\s*(?:<([^>\n]+)>|([^\s)]+))(?:\s+['\"][^)\n]*['\"])?\s*\)"
+)
 
 
 def frontmatter(text: str) -> tuple[dict[str, str], list[str]]:
@@ -45,6 +49,25 @@ def frontmatter(text: str) -> tuple[dict[str, str], list[str]]:
         else:
             errors.append(f"unsupported nested YAML under {current_parent!r}: {raw!r}")
     return data, errors
+
+
+def explicit_resource_references(text: str) -> list[str]:
+    """Return only resource paths expressed through established explicit Markdown syntax."""
+    references: list[str] = []
+
+    def add(raw: str) -> None:
+        candidate = raw.strip()
+        candidate = candidate.split("#", 1)[0]
+        if RESOURCE_PATH_RE.fullmatch(candidate) and candidate not in references:
+            references.append(candidate)
+
+    for match in INLINE_CODE_RE.finditer(text):
+        add(match.group(1))
+
+    for match in MARKDOWN_LINK_RE.finditer(text):
+        add(match.group(1) or match.group(2))
+
+    return references
 
 
 def validate_skill(path: Path) -> list[str]:
@@ -82,15 +105,8 @@ def validate_skill(path: Path) -> list[str]:
     if not notice.is_file():
         errors.append("missing LICENSE.pstack.txt package notice")
 
-    for match in RESOURCE_RE.findall(text):
-        resource = match.rstrip(".,;:)")
-        candidate = path / resource
-        if candidate.exists():
-            continue
-        # Bare directory-like prose such as "scripts/codemods" is ambiguous and
-        # must not be promoted into a file-reference contract. Missing file-like
-        # paths remain actionable validation failures.
-        if Path(resource).suffix:
+    for resource in explicit_resource_references(text):
+        if not (path / resource).exists():
             errors.append(f"broken local resource reference: {resource}")
 
     return errors

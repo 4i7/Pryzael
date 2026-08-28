@@ -1,19 +1,25 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import {
+  PINNED_SKILLS_REF,
+  assertFrozenR1Contract,
+  assertPinnedSkillsRefIdentity,
+  canonicalPackageIdentity,
+  catalogFileIdentity,
+  ordinalCompare,
+  sha256,
+} from "./r1_qualification_invariants.mjs";
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
 const CATALOG_PATH = path.join(ROOT, "worker", "generated", "catalog.mjs");
+const FROZEN_CONTRACT_PATH = path.join(ROOT, "tests", "fixtures", "r1-qualified-contract.json");
 const REPORT_PATH = path.join(ROOT, "dist", "r1-qualification.json");
 const BUILD_OUT = path.join(ROOT, ".qualification-dist");
-const RESOURCE_ROOTS = ["references", "assets", "scripts"];
-
-function sha256(buffer) {
-  return crypto.createHash("sha256").update(buffer).digest("hex");
-}
+const UPSTREAM_VENV = path.join(ROOT, ".qualification-python");
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -21,6 +27,7 @@ function run(command, args, options = {}) {
     encoding: "utf8",
     stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
     shell: false,
+    env: options.env ?? process.env,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
@@ -31,7 +38,12 @@ function run(command, args, options = {}) {
 }
 
 function available(command, args = ["--version"]) {
-  const result = spawnSync(command, args, { cwd: ROOT, encoding: "utf8", stdio: "ignore", shell: false });
+  const result = spawnSync(command, args, {
+    cwd: ROOT,
+    encoding: "utf8",
+    stdio: "ignore",
+    shell: false,
+  });
   return !result.error && result.status === 0;
 }
 
@@ -39,119 +51,78 @@ function findPython() {
   for (const candidate of [process.env.PYTHON, "python3", "python"].filter(Boolean)) {
     if (available(candidate)) return candidate;
   }
-  throw new Error("Python is required for scripts/validate_skills.py");
+  throw new Error("Python is required for R1 qualification");
 }
 
 function sortedSkillNames() {
   return fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b));
+    .sort(ordinalCompare);
 }
 
-function walkCanonicalEntries(skillDir) {
-  const entries = [];
-  const visit = (absolute, relative) => {
-    const stat = fs.lstatSync(absolute);
-    if (stat.isSymbolicLink()) {
-      entries.push({ path: relative, kind: "symlink", target: fs.readlinkSync(absolute) });
-      return;
-    }
-    if (stat.isDirectory()) {
-      for (const name of fs.readdirSync(absolute).sort((a, b) => a.localeCompare(b))) {
-        visit(path.join(absolute, name), path.posix.join(relative, name));
-      }
-      return;
-    }
-    if (stat.isFile()) entries.push({ path: relative, kind: "file", bytes: fs.readFileSync(absolute) });
-  };
+function establishLockedDependencies() {
+  run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
+}
 
-  visit(path.join(skillDir, "SKILL.md"), "SKILL.md");
-  for (const root of RESOURCE_ROOTS) {
-    const absolute = path.join(skillDir, root);
-    if (fs.existsSync(absolute)) visit(absolute, root);
+function venvPythonPath() {
+  return process.platform === "win32"
+    ? path.join(UPSTREAM_VENV, "Scripts", "python.exe")
+    : path.join(UPSTREAM_VENV, "bin", "python");
+}
+
+function venvSkillsRefPath() {
+  return process.platform === "win32"
+    ? path.join(UPSTREAM_VENV, "Scripts", "skills-ref.exe")
+    : path.join(UPSTREAM_VENV, "bin", "skills-ref");
+}
+
+function establishPinnedUpstreamValidation(systemPython, skillNames) {
+  fs.rmSync(UPSTREAM_VENV, { recursive: true, force: true });
+  run(systemPython, ["-m", "venv", UPSTREAM_VENV]);
+
+  const python = venvPythonPath();
+  if (!fs.statSync(python).isFile()) {
+    throw new Error(`qualification venv Python is unavailable: ${python}`);
   }
-  return entries;
-}
 
-function packageIdentity(skillName) {
-  const skillDir = path.join(SKILLS_DIR, skillName);
-  const entries = walkCanonicalEntries(skillDir);
-  const hash = crypto.createHash("sha256");
-  let bytes = 0;
-  let resourceFiles = 0;
-  let largestResourceBytes = 0;
-  let symlinks = 0;
+  const requirement =
+    `git+${PINNED_SKILLS_REF.repository}@${PINNED_SKILLS_REF.commit}` +
+    `#subdirectory=${PINNED_SKILLS_REF.subdirectory}`;
+  run(python, [
+    "-m", "pip", "install",
+    "--disable-pip-version-check",
+    "--no-input",
+    requirement,
+  ]);
 
-  for (const entry of entries) {
-    hash.update(entry.path);
-    hash.update("\0");
-    hash.update(entry.kind);
-    hash.update("\0");
-    if (entry.kind === "symlink") {
-      symlinks += 1;
-      hash.update(entry.target);
-    } else {
-      hash.update(entry.bytes);
-      bytes += entry.bytes.length;
-      if (entry.path !== "SKILL.md") {
-        resourceFiles += 1;
-        largestResourceBytes = Math.max(largestResourceBytes, entry.bytes.length);
-      }
-    }
-    hash.update("\0");
+  const probe = [
+    "import importlib.metadata as m, json",
+    "d=m.distribution('skills-ref')",
+    "raw=d.read_text('direct_url.json')",
+    "print(json.dumps({'version': d.version, 'directUrl': json.loads(raw) if raw else None}))",
+  ].join("; ");
+  const installedIdentity = JSON.parse(run(python, ["-c", probe], { capture: true }));
+  const pinnedIdentity = assertPinnedSkillsRefIdentity(installedIdentity);
+
+  const executable = venvSkillsRefPath();
+  if (!fs.statSync(executable).isFile()) {
+    throw new Error(`required pinned skills-ref executable is unavailable: ${executable}`);
+  }
+
+  for (const skillName of skillNames) {
+    run(executable, ["validate", path.join("skills", skillName)]);
   }
 
   return {
-    digest: hash.digest("hex"),
-    canonicalBytes: bytes,
-    resourceFiles,
-    largestResourceBytes,
-    symlinks,
+    status: "PASS",
+    authority: "agentskills/skills-ref",
+    version: pinnedIdentity.version,
+    repository: pinnedIdentity.repository,
+    subdirectory: pinnedIdentity.subdirectory,
+    commit: pinnedIdentity.commit,
+    skills: skillNames.length,
   };
-}
-
-function gitIdentity() {
-  return {
-    commit: run("git", ["rev-parse", "HEAD"], { capture: true }),
-    tree: run("git", ["rev-parse", "HEAD^{tree}"], { capture: true }),
-  };
-}
-
-function dependencyIdentity() {
-  const raw = run("npm", ["ls", "--all", "--json"], { capture: true });
-  const parsed = JSON.parse(raw);
-
-  function normalize(node) {
-    const normalized = {};
-    if (typeof node.name === "string") normalized.name = node.name;
-    if (typeof node.version === "string") normalized.version = node.version;
-    if (node.dependencies && typeof node.dependencies === "object") {
-      normalized.dependencies = Object.fromEntries(
-        Object.entries(node.dependencies)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([name, dependency]) => [name, normalize(dependency)]),
-      );
-    }
-    return normalized;
-  }
-
-  const normalized = normalize(parsed);
-  const serialized = JSON.stringify(normalized);
-  return { digest: sha256(serialized), tree: normalized };
-}
-
-function runUpstreamValidation(skillNames) {
-  if (!available("skills-ref", ["--help"])) {
-    return {
-      status: "INCONCLUSIVE",
-      authority: "agentskills/skills-ref",
-      reason: "skills-ref executable is not available on this qualification surface",
-    };
-  }
-
-  for (const skillName of skillNames) run("skills-ref", ["validate", path.join("skills", skillName)]);
-  return { status: "PASS", authority: "agentskills/skills-ref", skills: skillNames.length };
 }
 
 function deterministicCatalog() {
@@ -160,8 +131,53 @@ function deterministicCatalog() {
   const first = fs.readFileSync(CATALOG_PATH);
   run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
   const second = fs.readFileSync(CATALOG_PATH);
-  if (!first.equals(second)) throw new Error("MCP catalog generation is not byte-for-byte deterministic");
-  return { digest: sha256(first), bytes: first.length };
+  if (!first.equals(second)) {
+    throw new Error("MCP catalog generation is not byte-for-byte deterministic");
+  }
+  return catalogFileIdentity(CATALOG_PATH);
+}
+
+function normalizeDependencyTree(node) {
+  const normalized = {};
+  if (typeof node.name === "string") normalized.name = node.name;
+  if (typeof node.version === "string") normalized.version = node.version;
+  if (node.dependencies && typeof node.dependencies === "object") {
+    normalized.dependencies = Object.fromEntries(
+      Object.entries(node.dependencies)
+        .sort(([a], [b]) => ordinalCompare(a, b))
+        .map(([name, dependency]) => [name, normalizeDependencyTree(dependency)]),
+    );
+  }
+  return normalized;
+}
+
+function dependencyIdentity() {
+  const lockPath = path.join(ROOT, "package-lock.json");
+  const lockBytes = fs.readFileSync(lockPath);
+  const lock = JSON.parse(lockBytes);
+  const installed = JSON.parse(run("npm", ["ls", "--all", "--json"], { capture: true }));
+  const normalized = normalizeDependencyTree(installed);
+  const serialized = JSON.stringify(normalized);
+
+  return {
+    authority: {
+      path: "package-lock.json",
+      lockfileVersion: lock.lockfileVersion,
+      sha256: sha256(lockBytes),
+      gitBlob: run("git", ["hash-object", "package-lock.json"], { capture: true }),
+    },
+    observedExecutionEnvironment: {
+      digest: sha256(serialized),
+      tree: normalized,
+    },
+  };
+}
+
+function gitIdentity() {
+  return {
+    commit: run("git", ["rev-parse", "HEAD"], { capture: true }),
+    tree: run("git", ["rev-parse", "HEAD^{tree}"], { capture: true }),
+  };
 }
 
 function buildIdentity() {
@@ -177,51 +193,101 @@ function buildIdentity() {
 }
 
 function main() {
+  fs.rmSync(REPORT_PATH, { force: true });
+  fs.rmSync(BUILD_OUT, { recursive: true, force: true });
+
   const skillNames = sortedSkillNames();
   const python = findPython();
 
+  establishLockedDependencies();
+
   run(python, ["scripts/validate_skills.py"]);
   run(python, ["-m", "unittest", "tests/test_validate_skills.py"]);
-  const upstreamSpecValidation = runUpstreamValidation(skillNames);
+  run(process.execPath, ["--test", "tests/qualification-gates.test.mjs"]);
+
+  const upstreamSpecValidation = establishPinnedUpstreamValidation(python, skillNames);
   const catalog = deterministicCatalog();
 
-  run(process.execPath, ["--test", "tests/structural-conformance.test.mjs", "worker/index.test.mjs"]);
-
-  fs.rmSync(BUILD_OUT, { recursive: true, force: true });
-  run("npx", ["--no-install", "wrangler", "deploy", "--dry-run", "--outdir", BUILD_OUT]);
-  const postBuildCatalog = fs.readFileSync(CATALOG_PATH);
-  if (sha256(postBuildCatalog) !== catalog.digest) throw new Error("build dry-run changed the deterministic catalog identity");
-  fs.rmSync(BUILD_OUT, { recursive: true, force: true });
-
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, ".codex-plugin", "plugin.json"), "utf8"));
-  const packages = Object.fromEntries(skillNames.map((skillName) => [skillName, packageIdentity(skillName)]));
-  const totals = Object.values(packages).reduce((acc, item) => ({
-    canonicalBytes: acc.canonicalBytes + item.canonicalBytes,
-    resourceFiles: acc.resourceFiles + item.resourceFiles,
-    largestResourceBytes: Math.max(acc.largestResourceBytes, item.largestResourceBytes),
-    symlinks: acc.symlinks + item.symlinks,
-  }), { canonicalBytes: 0, resourceFiles: 0, largestResourceBytes: 0, symlinks: 0 });
+  const packages = Object.fromEntries(
+    skillNames.map((skillName) => [
+      skillName,
+      canonicalPackageIdentity(path.join(SKILLS_DIR, skillName)),
+    ]),
+  );
+  const frozenContract = JSON.parse(fs.readFileSync(FROZEN_CONTRACT_PATH, "utf8"));
+  const skillsTreeGitSha = run("git", ["rev-parse", "HEAD:skills"], { capture: true });
+
+  assertFrozenR1Contract({
+    fixture: frozenContract,
+    pluginVersion: manifest.version,
+    skillNames,
+    packageIdentities: packages,
+    catalogIdentity: catalog,
+    skillsTreeGitSha,
+  });
+
+  run(process.execPath, [
+    "--test",
+    "tests/structural-conformance.test.mjs",
+    "worker/index.test.mjs",
+  ]);
+
+  fs.rmSync(BUILD_OUT, { recursive: true, force: true });
+  run("npx", [
+    "--no-install",
+    "wrangler",
+    "deploy",
+    "--dry-run",
+    "--outdir",
+    BUILD_OUT,
+  ]);
+  const postBuildCatalog = catalogFileIdentity(CATALOG_PATH);
+  if (postBuildCatalog.digest !== catalog.digest || postBuildCatalog.bytes !== catalog.bytes) {
+    throw new Error("build dry-run changed the deterministic catalog identity");
+  }
+  fs.rmSync(BUILD_OUT, { recursive: true, force: true });
+
+  const totals = Object.values(packages).reduce(
+    (acc, item) => ({
+      canonicalBytes: acc.canonicalBytes + item.canonicalBytes,
+      resourceFiles: acc.resourceFiles + item.resourceFiles,
+      largestResourceBytes: Math.max(acc.largestResourceBytes, item.largestResourceBytes),
+      symlinks: acc.symlinks + item.symlinks,
+    }),
+    { canonicalBytes: 0, resourceFiles: 0, largestResourceBytes: 0, symlinks: 0 },
+  );
 
   const report = {
     status: "PASS",
+    qualificationCommand: "npm run check",
     source: gitIdentity(),
     pluginVersion: manifest.version,
     skillCount: skillNames.length,
     canonicalPackages: packages,
     generatedCatalog: catalog,
-    resolvedDependencies: dependencyIdentity(),
+    dependencies: dependencyIdentity(),
     build: buildIdentity(),
     resourceEnvelope: totals,
     upstreamSpecValidation,
+    frozenR1Contract: {
+      status: "PASS",
+      fixture: "tests/fixtures/r1-qualified-contract.json",
+      provenance: frozenContract.provenance,
+    },
     deploymentIdentity: "NOT_USED",
     checks: {
       canonicalPackageValidation: "PASS",
-      validatorDefectClassRegression: "PASS",
-      deterministicRebuild: "PASS",
-      canonicalProjectionParity: "PASS",
-      workerProtocolMatrix: "PASS",
-      malformedAndResourceBoundaryChecks: "PASS",
-      buildDryRun: "PASS",
+      pinnedIndependentUpstreamValidation: "PASS",
+      validatorRegressionTests: "PASS",
+      generation: "PASS",
+      freshness: "PASS",
+      deterministicGeneration: "PASS",
+      frozenContract: "PASS",
+      canonicalProjectionConformance: "PASS",
+      workerProtocolTests: "PASS",
+      malformedAndResourceBoundaryTests: "PASS",
+      wranglerBuildDryRun: "PASS",
     },
   };
 
