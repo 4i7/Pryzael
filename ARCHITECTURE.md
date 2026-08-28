@@ -18,7 +18,7 @@ The design optimizes for:
 There are three distinct authorities:
 
 - **Workflow authority:** each `skills/<name>/SKILL.md` plus files below that Skill root.
-- **MCP projection implementation:** `scripts/generate_mcp_catalog.mjs` plus `worker/index.ts`.
+- **MCP projection implementation:** `scripts/generate_mcp_catalog.mjs` plus `worker/index.mjs`.
 - **Plugin packaging authority:** `.codex-plugin/plugin.json`, which continues to describe the installable Skill collection.
 
 The build generator derives tool descriptions, workflow bodies, and package-local text resources from the canonical Skill packages. The Worker must not carry manually duplicated workflow text.
@@ -36,26 +36,18 @@ skills/*/{references,assets,scripts}/   optional
 scripts/generate_mcp_catalog.mjs
         |
         v
-worker/generated/catalog.ts            disposable derived artifact
+worker/generated/catalog.mjs           disposable derived artifact
         |
         v
-worker/index.ts
+worker/index.mjs
         |
         v
 Cloudflare Workers /mcp
 ```
 
-`wrangler.jsonc` is deployment configuration and `package.json` declares the Worker/MCP build dependencies.
+`wrangler.jsonc` is deployment configuration and `package.json` declares the minimal Worker/MCP build dependencies.
 
-The deployed runtime must not require:
-
-- a local process or tunnel;
-- Durable Objects;
-- KV, D1, R2, Queues, or a hosted database;
-- Pryzael-owned OpenAI API/model calls;
-- GitHub Actions as a request-path service;
-- connector proxying;
-- server-side workflow state.
+The deployed runtime must not require a local process or tunnel, Durable Objects, KV/D1/R2/Queues/databases, Pryzael-owned model/API calls, GitHub Actions as request-path service, connector proxying, or server-side workflow state.
 
 ## 4. Discovery and trigger design
 
@@ -122,14 +114,9 @@ The generator runs at build/deploy time and:
 2. validates directory/name consistency;
 3. reads `name`, `description`, and body;
 4. collects text resources under `references/`, `assets/`, and `scripts/` without following symlinks;
-5. emits a disposable TypeScript catalog consumed by the Worker.
+5. emits a disposable JavaScript catalog consumed by the Worker.
 
-The Worker creates one MCP tool per catalog entry. A normal call returns:
-
-- the selected Skill body;
-- the list of bundled package-local text resources available for that Skill.
-
-When called with an exact advertised `resource` key, it returns that resource's text. Scripts are returned as text only and are never executed.
+The Worker creates one MCP tool per catalog entry. A normal call returns the selected Skill body and the list of bundled package-local text resources available for that Skill. When called with an exact advertised `resource` key, it returns that resource's text. Scripts are returned as text only and are never executed.
 
 MCP annotations are:
 
@@ -144,7 +131,7 @@ The Worker itself does not perform the engineering task. It supplies the canonic
 
 ## 7. Cloudflare execution model
 
-Pryzael uses Cloudflare's current stateless MCP path: `createMcpHandler()` with Streamable HTTP.
+Pryzael uses the current minimal stateless MCP path from `@modelcontextprotocol/server` 2.0.0, including `createMcpHandler()`, with Streamable HTTP. The Agents SDK and Cloudflare-specific TypeScript definition package are intentionally not dependencies.
 
 The Worker exposes:
 
@@ -153,9 +140,7 @@ The Worker exposes:
 /health    service/version/tool-count health endpoint
 ```
 
-A fresh MCP server instance is created per request. No protocol or workflow state is persisted between requests.
-
-This choice avoids the deprecated/new-server-inappropriate Durable Object `McpAgent` path and keeps the Free-plan CPU/request model simple.
+A fresh MCP server instance is created per request. No protocol or workflow state is persisted between requests. Plain JavaScript is used deliberately so deployment correctness does not depend on the publication cadence of Cloudflare TypeScript definition packages.
 
 ## 8. Capability contract
 
@@ -192,17 +177,11 @@ Core invariant:
 
 ## 11. GitHub connector boundary
 
-Pryzael uses GitHub operation semantics rather than hard-coded host-internal tool names. The MCP Worker does not proxy GitHub and never receives GitHub credentials.
-
-A host may separately expose repository resolution, commit/file reads, comparisons, PR metadata, CI evidence, and optional writes. Workflows degrade transparently when those capabilities are unavailable.
+Pryzael uses GitHub operation semantics rather than hard-coded host-internal tool names. The MCP Worker does not proxy GitHub and never receives GitHub credentials. Host-provided repository reads/writes remain separately authorized capabilities.
 
 ## 12. Decision trails
 
-`show-me-your-work` owns decision/evidence trail semantics. The logical fields remain:
-
-`ts`, `phase`, `decision`, `why`, `evidence`, `result`.
-
-Its TSV template is bundled as a package-local MCP resource and remains a native Skill asset.
+`show-me-your-work` owns decision/evidence trail semantics. The logical fields remain `ts`, `phase`, `decision`, `why`, `evidence`, `result`. Its TSV template is bundled as a package-local MCP resource and remains a native Skill asset.
 
 ## 13. Source and licensing
 
@@ -214,15 +193,13 @@ Validation has four layers:
 
 1. upstream Agent Skills validation when available;
 2. `python scripts/validate_skills.py` for Pryzael Skill-package invariants;
-3. Worker build/type validation after dependency installation;
+3. generated-catalog plus Wrangler dry-run bundle validation;
 4. live Cloudflare endpoint and ChatGPT product-surface qualification.
 
-Expected Worker checks are:
+Expected Worker check after dependencies are installed:
 
 ```text
-npm run generate:mcp-catalog
-npm run typecheck
-npx wrangler deploy --dry-run
+npm run check
 ```
 
 Important invariants:
@@ -231,7 +208,8 @@ Important invariants:
 - Worker tool descriptions and bodies are generated from canonical Skills;
 - runtime performs no filesystem scan, downstream network/API call, or persistent-state access;
 - package resources cannot be invented by the caller and are limited to generated catalog keys;
-- a Skill change requires no manual parallel edit to MCP workflow text.
+- a Skill change requires no manual parallel edit to MCP workflow text;
+- deployability does not depend on Cloudflare's separately versioned TypeScript definitions.
 
 Static checks cannot prove that a particular ChatGPT surface will expose or execute the MCP tools. Only observable behavior on that product surface can establish that.
 
@@ -269,28 +247,12 @@ Cloudflare Workers
   -> generated public Pryzael workflow catalog
 ```
 
-Still excluded unless future evidence requires them:
-
-- local always-on processes or tunnels;
-- Vercel/Netlify/other duplicate hosts;
-- Durable Objects/stateful MCP sessions;
-- KV/D1/R2/Queues/databases;
-- GitHub Actions as runtime;
-- Pryzael model/API calls;
-- connector credential proxying.
+Still excluded unless future evidence requires them: local always-on processes/tunnels, duplicate hosts, Durable Objects/stateful MCP sessions, KV/D1/R2/Queues/databases, GitHub Actions as runtime, Pryzael model/API calls, or connector credential proxying.
 
 Cloudflare plan limits remain external product constraints. Pryzael does not claim that those services are unlimited.
 
 ## 17. Non-goals
 
-Pryzael is not:
-
-- a durable workflow/transaction engine;
-- a GitHub proxy;
-- an autonomous background service;
-- a promise that subagents or browser control exist;
-- a replacement for tests/CI;
-- a guarantee that every ChatGPT surface can call unpublished MCP plugins;
-- a guarantee of unlimited ChatGPT or Cloudflare usage.
+Pryzael is not a durable workflow/transaction engine, GitHub proxy, autonomous background service, promise that subagents/browser control exist, replacement for tests/CI, guarantee every ChatGPT surface can call unpublished MCP plugins, or guarantee of unlimited ChatGPT/Cloudflare usage.
 
 It is a portable engineering workflow layer with native Skill and remote MCP projections from one canonical source.
