@@ -2,104 +2,54 @@
 
 ## Authority and purpose
 
-This directory is evaluation authority, not production Skill semantic authority.
+This directory is evaluation authority, not production Skill semantic authority. Production still flows from `skills/<name>/` packages. R4 evaluation uses a frozen public contract plus an independently frozen public qualification commitment plus a development-inaccessible hidden qualification packet, then exactly bound trial records and a deterministic `ADMIT | REJECT | INCONCLUSIVE` evaluator. Skill semantics, routing behavior, parser/generated MCP semantics, and Worker/runtime authority are outside this repair. Hidden chain-of-thought is neither requested nor judged.
 
-Production direction remains:
+## Held-out architecture decision
 
-```text
-skills/<name>/ package
-        ↓
-Pryzael behavior / generated projections
-```
+The previous R4 head committed full qualification prompts and answer-bearing predicates to `evaluation/corpus/held-out.json`. That material was frozen but not held out, so it is invalidated and removed.
 
-Evaluation direction is separate:
+Two viable isolation architectures were compared. An evaluator-only encrypted artifact in the development repository can hide plaintext only if key custody, decryption authorization, distribution, and non-disclosure are separately enforced; here it would add a second security authority and risk security theater. The selected design is an independent hidden packet with a public cryptographic commitment: the repository contains only immutable evaluation rules, packet/commitment schemas, admission code, and public manifest; an independent qualification authority creates and retains the packet outside candidate-development access and publishes only its commitment.
 
-```text
-frozen evaluation contract + corpus
-        ↓
-trial
-        ↓
-evidence
-        ↓
-judge
-        ↓
-deterministic aggregate/admission decision
-```
+The repository must not contain a final hidden qualification packet. The Lab rejects `evaluation/corpus/held-out.json`, `evaluation/qualification-packet.json`, and equivalent repository-visible qualification payloads.
 
-Gold success predicates and expected diagnoses are never model inputs. The evaluated model receives only the task `prompt` plus the ordinary session/tool context of the condition. `skills/**`, Skill descriptions, parser behavior, generated MCP semantics, and Worker authority are outside R4 mutation scope.
+## Two-stage freeze
 
-The central question is whether Pryzael improves observable engineering outcomes relative to the same frontier model without Pryzael while avoiding material regressions in epistemic correctness, authority discipline, efficiency, and reasoning freedom. Protocol wording compliance is not a proxy for task success.
+This repair does **not** create or inspect a final hidden packet.
 
-## Architecture decision
+Stage 1 freezes `evaluation/contract.json`, the packet/commitment/result schemas, the executable Lab authority, and `evaluation/frozen-manifest.json`. Stage 2 is performed only by an independent qualification authority after R4 Lab merge and before R4C baseline measurement: create a new packet outside the development repository, validate frozen family coverage, compute its exact SHA-256 and byte count, and publish only `evaluation/qualification-commitment.json` with qualification-set ID, packet schema/version, packet digest/bytes, task IDs/families/task digests, and freeze authority/timestamp. Prompts, success/critical predicates, judge material, and answers remain hidden. The same committed packet is used for `NO_PRYZAEL`, `CURRENT_PRYZAEL`, and later `CANDIDATE_PRYZAEL`.
 
-Four serious representations were compared before implementation.
+The former repository-visible held-out prompts are not reusable qualification material and must not seed the final packet.
 
-1. **Markdown-only corpus/rubric plus ad-hoc result notes.** Most reviewable, but weak for digest binding, schema validation, deterministic aggregation, and accidental partition mixing.
-2. **Fully machine-readable corpus and result model.** Strong reproducibility but risks making generated/rendered documents a second evaluation truth if a renderer becomes authoritative.
-3. **Executable harness with embedded fixtures.** Strong mechanics but couples evaluation authority to one execution surface and makes ChatGPT/native/MCP portability worse.
-4. **Hybrid authority (selected):** machine-readable contract/corpus/result schema with a human-readable protocol document and small validator/aggregator. There is one rubric truth in the corpus JSON; this document explains the contract but does not duplicate task answers.
+## Exact result identity binding
 
-The selected shape is the smallest one that gives task-level immutable digests, held-out partition checks, portable external result capture, deterministic aggregation, and independent review without creating a Pryzael production-semantic registry.
+Every authoritative trial binds the evaluation-contract ID/SHA-256, Stage-1 manifest ID/SHA-256, qualification-set ID, Stage-2 commitment and hidden-packet SHA-256, exact task ID/family/partition/digest, R3 protocol revision, condition, exact Pryzael source commit/tree/plugin/canonical Skill-tree/package identity where applicable, activation mode/surface, observer revision, host/model/config/product/transport observations, ordinary tool availability, authority-envelope ID, and trial-protocol budget ID. Unobservable facts remain `UNKNOWN`.
 
-## Frozen partitions
+`CURRENT_PRYZAEL` is frozen to source commit `3bba19e0be936e7b9d3554ac737d32f5cf84c846`, tree `29c3d97126d0f11de8d5c89dddf21f23d861f257`, plugin `0.3.0`, canonical `skills/` tree `4395ef86a309ed610f4860f47284d0e4da572914`, and R3 protocol blob `90ea867c0495162eae4aebe00d3467b18afe4577`. Candidate identities are recorded only after the candidate is frozen; mixed artifacts are rejected.
 
-`evaluation/corpus/development.json` is visible development material. It may be used to debug the evaluator and future candidate prototypes, but it is never final admission authority.
+## Metric authority and polarity
 
-`evaluation/corpus/held-out.json` is frozen qualification material. It is intentionally stored separately and bound by `evaluation/frozen-manifest.json`. Candidate authors must not use it for prompt/Skill tuning after this freeze. Repository visibility is not treated as secrecy; the protection is pre-registration, task/file digests, process separation, and contamination reporting.
+Each mechanically consumed metric is defined once in `evaluation/contract.json` with ID, semantic definition, applicability, domain, polarity, `NOT_APPLICABLE`/`INCONCLUSIVE` semantics, aggregation rule, and role (`AUTHORITATIVE`, `CRITICAL`, or `DIAGNOSTIC`). Important directions are explicit: `FALSE_VERIFIED = ABSENT_IS_BETTER`, `EVIDENCE_ADEQUACY = ADEQUATE_IS_BETTER`, and `REPLANNING_COMPETENCE = APPROPRIATE_REPLAN_IS_BETTER`. `SOLUTION_CLASS_COLLAPSE` is diagnostic and cannot reject a candidate by itself.
 
-Every task has a content digest computed from its canonical JSON object excluding the digest field. The frozen manifest also binds complete contract/corpus/routing/schema file bytes. Editing any bound file requires an explicit re-freeze before authoritative measurement.
+## Critical predicates and replanning
 
-## Experimental conditions and observables
+Qualification tasks own their exact critical predicate IDs. Trial records must observe every frozen success and critical predicate. An applicable critical predicate `VERIFIED` is disqualifying and cannot be averaged away; `INCONCLUSIVE` blocks `ADMIT`. Critical applicability remains task-specific.
 
-The representative semantic comparison has three condition labels: `NO_PRYZAEL`, `CURRENT_PRYZAEL`, and `CANDIDATE_PRYZAEL`. Candidate identity is intentionally unresolved until a later candidate exists.
+`REPLANNING_COMPETENCE` measures response to material evidence change rather than plan-change frequency. Replanning tasks freeze observable prior assumption, new evidence, and material invalidation structure. Trials record the observed response and judge one of `APPROPRIATE_REPLAN`, `FAILED_TO_REPLAN`, `UNJUSTIFIED_PLAN_CHURN`, or `INCONCLUSIVE`; non-replanning tasks use `NOT_APPLICABLE`. Appropriate replanning cannot be awarded without material invalidation.
 
-Activation/selection is not one routing score:
+## Condition/surface separation and no-Pryzael control
 
-- `CONDITIONED_BEHAVIOR` controls Skill activation/use and is primary authority for Skill-body semantic effects.
-- `NATIVE_AUTOMATIC_SKILL_SELECTION` is fresh-chat/first-turn native selection.
-- `MCP_TOOL_SELECTION` is automatic MCP/tool selection.
-- `FORCED_INVOCATION_CALIBRATION` tests observability sensitivity only and is never automatic-routing evidence.
+`CONDITIONED_BEHAVIOR`, `NATIVE_AUTOMATIC_SKILL_SELECTION`, `MCP_AUTOMATIC_TOOL_SELECTION`, and `FORCED_INVOCATION_CALIBRATION` are mechanically separate. Native and MCP surfaces are distinct. Skill-body-only candidate admission uses conditioned qualification evidence; routing/discovery changes additionally require complete, separate native and MCP automatic-routing evidence. Forced invocation is calibration-only.
 
-Native and MCP measurements retain separate trials, metrics, evidence, and gates.
+`NO_PRYZAEL` removes Pryzael procedural assistance while preserving ordinary engineering tools. The evaluator compares task revision, host/product surface, model/configuration where observable, observer, transport, ordinary tools, product version, authority envelope, and protocol budget. Known asymmetry yields `INCONCLUSIVE`; unknown facts remain `UNKNOWN`. GitHub/code/test tools are not removed simply because Pryzael is absent, and Pryzael procedural language is not leaked into the shared task prompt.
 
-## Outcome-first judging
+## Executable admission
 
-Task predicates are defined independently of future candidate wording. Judges do not score hidden reasoning transcripts and never require chain-of-thought. A response can succeed without Pryzael vocabulary; repeating that vocabulary does not rescue an incorrect outcome.
+`evaluateCandidateAdmission()` fail-closes on malformed or incomplete evidence. It enforces exact required N and task/condition/index/mode/surface matrix, missing/duplicate trials, partition and identity consistency, no-Pryzael comparability, critical overrides, authoritative inconclusive handling, total/family task-success non-inferiority, critical/repeated-same-task regressions, autonomy/replanning/ceremony limits, and diagnostic non-authority. Aggregation also rejects mixed partitions, conditioned/automatic modes, native/MCP surfaces, duplicate slots/IDs, and mixed Pryzael artifact identities. Deterministic categorical/count gates are used; no statistical significance is fabricated.
 
-Objective predicates are decided mechanically where possible. Subjective engineering predicates use the frozen statement, independent scoring, blinded condition labels where practical, and `INCONCLUSIVE` when evidence is insufficient. Candidate authors cannot be the sole final authority.
+## Contamination guard and later procedure
 
-R3 taxonomy is evaluation input, not a mandatory workflow checklist:
+The frozen authority records `AUTHORITATIVE_BASELINE_MEASURED = false` and `HELD_OUT_RESULTS_OBSERVED = false`. Only synthetic evaluator mechanics/schema/integrity checks are allowed in this repair.
 
-- relevant `HARD INVARIANT` violations may directly fail a trial;
-- skipping a `HEURISTIC` is not failure unless observable outcomes suffer;
-- skipping an `OPTIONAL TECHNIQUE` is never failure by itself.
+After independent R4 repair review and merge: (A) independent authority creates the hidden packet outside development access; (B) publishes the non-secret commitment before R4C; (C) R4C verifies exact packet bytes and evaluates `NO_PRYZAEL` and `CURRENT_PRYZAEL`; (D) a future R5 candidate is developed without packet access and frozen to exact identity; (E) an independent qualifier evaluates that candidate against the same packet; (F) frozen R4 admission computes the decision. Candidate authors cannot mutate packet or evaluation rules.
 
-## Autonomy and efficiency
-
-`PREMATURE_CONVERGENCE` is consequential failure to investigate materially plausible alternatives or causes under unresolved uncertainty. It is not a required alternative count.
-
-`PATH_OVERCONSTRAINT` is a Pryzael-induced restriction that blocks or materially degrades a valid path without correctness/authority justification.
-
-`SOLUTION_CLASS_COLLAPSE` is diagnostic only. Low diversity can be appropriate when a task has one strong solution.
-
-`REPLANNING_COMPETENCE` measures appropriate revision after new evidence invalidates assumptions; arbitrary churn is not rewarded.
-
-`CEREMONY_TAX` is material work/latency/verbosity with no compensating success, safety, evidence, or reviewability benefit. Low-risk corpus tasks deliberately expose disproportional process.
-
-## Pre-registration and admission
-
-Trial counts, retries, judge disagreement, aggregation, non-inferiority, critical failures, autonomy limits, ceremony limits, and routing scope are frozen in `evaluation/contract.json`.
-
-The sample sizes are not presented as statistical power. Admission uses conservative deterministic count rules. Required missing trials are inconclusive. Critical epistemic/authority failures are reported separately and cannot be averaged away by an overall quality score.
-
-For a Skill-body-only future candidate, held-out `CONDITIONED_BEHAVIOR` admission is required. Automatic routing is independently required only if descriptions, Skill count, discovery metadata, native routing, or MCP routing change.
-
-The no-Pryzael condition keeps model/host/task/tools equivalent where observable except for Pryzael procedural assistance. Unavoidable differences are recorded as limitations; causal claims are prohibited when equivalence cannot be established.
-
-## Baseline contamination guard
-
-R4A/R4B may run synthetic evaluator self-tests, schema validation, deterministic aggregation tests, and non-authoritative canary calibration. It must not measure authoritative held-out current-Pryzael outcomes.
-
-If a final held-out result becomes visible before independent review/freeze completion, record contamination and replace/re-freeze the affected material before baseline measurement.
-
-The next admissible action after this implementation is **independent R4 Lab review only**. Authoritative untouched baseline measurement belongs after that review.
+The next admissible action after this repair is **independent R4 repair review only**.
