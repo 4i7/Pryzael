@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   qualify:
@@ -37,14 +37,16 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install current project dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Bootstrap dependency lock into feature branch
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "Lock R1 build dependencies"
-          git push origin HEAD:vnext/r1-structural-conformance
+      - name: Install pinned upstream Agent Skills validator
+        run: python -m pip install "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref"
+
+      - name: Install locked project dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run the single R1 qualification command
+        run: npm run check
