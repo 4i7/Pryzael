@@ -1,8 +1,13 @@
 # Pryzael
 
-Portable engineering skills for ChatGPT and other Agent Skills-compatible clients, adapted from selected `pstack` skills.
+Portable engineering workflows for ChatGPT, Codex, and other Agent Skills/MCP-compatible clients, adapted from selected `pstack` skills.
 
-Pryzael is both a source-of-truth repository and a **skills-only ChatGPT/Codex plugin package**. The repository root is the plugin root, `.codex-plugin/plugin.json` identifies the installable plugin, and each directory under `skills/` remains an independent Agent Skills package whose runtime manifest is its own `SKILL.md`.
+Pryzael keeps each `skills/<name>/SKILL.md` as the canonical workflow source and exposes the same workflows through two projections:
+
+- **Agent Skills** for clients that natively load skills;
+- **read-only remote MCP tools** served by a stateless Cloudflare Worker.
+
+The MCP layer is a generated adapter, not a second workflow implementation.
 
 ## Skills
 
@@ -15,74 +20,71 @@ Pryzael is both a source-of-truth repository and a **skills-only ChatGPT/Codex p
 - `sequence-verifiable-units` — split multi-step work into independently checkable transitions and verify before advancing.
 - `prove-it-works` — verify completion claims against the exact artifact and strongest available real behavior path.
 
-## Plugin shape
-
-Pryzael deliberately uses the OpenAI **Skills only** plugin architecture:
+## Runtime shape
 
 ```text
 .codex-plugin/plugin.json
-skills/
-  architect/
-  blast-radius/
-  figure-it-out/
-  fix-root-causes/
-  interrogate/
-  prove-it-works/
-  sequence-verifiable-units/
-  show-me-your-work/
+skills/*/SKILL.md                 canonical workflow authority
+scripts/generate_mcp_catalog.mjs  build-time projection
+worker/index.mjs                  stateless Streamable HTTP MCP
+wrangler.jsonc                    Cloudflare Workers deployment
+package.json
 ```
 
-There is no Pryzael MCP server, `.mcp.json`, `.app.json`, hosted database, external API, or always-on runtime. Skills use tools/connectors already available in the active ChatGPT or Codex session. This avoids adding a metered hosting dependency or another operational authority layer.
+Before Wrangler bundles the Worker, `scripts/generate_mcp_catalog.mjs` reads the eight canonical Skill packages and emits an ephemeral JavaScript catalog under `worker/generated/`. The deployed Worker therefore needs no filesystem, database, KV, D1, Durable Object, background process, OpenAI API call, or local PC.
 
-The absence of Pryzael runtime infrastructure does not remove usage limits imposed by ChatGPT plans, models, connectors, or third-party services.
+The Worker exposes:
 
-See [`docs/PLUGIN.md`](docs/PLUGIN.md) for the zero-infrastructure packaging, testing, and Web distribution model.
+- `/mcp` — stateless MCP Streamable HTTP endpoint;
+- `/health` — small service/version/tool-count health response.
 
-## Runtime model
+Each MCP tool description comes from the matching `SKILL.md` frontmatter, and its result returns that Skill body. Text resources under a Skill's `references/`, `assets/`, or `scripts/` directory are bundled at build time and can be requested on demand through the same tool.
 
-Pryzael follows the Agent Skills open format:
+The runtime uses Cloudflare's minimal stateless MCP path directly through `@modelcontextprotocol/server`; it does not require the Agents SDK or Cloudflare-specific TypeScript definitions.
+
+See [`docs/MCP.md`](docs/MCP.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## Authority boundary
+
+Each skill remains independently valid:
 
 ```text
 skills/<name>/
-  SKILL.md                 required manifest and instructions
-  references/              optional, loaded on demand
-  assets/                  optional templates/resources
-  scripts/                 optional executable helpers
-  LICENSE.pstack.txt       upstream notice for these adaptations
+  SKILL.md
+  references/              optional
+  assets/                  optional
+  scripts/                 optional
+  LICENSE.pstack.txt
 ```
 
-The `name` and `description` in each `SKILL.md` are the discovery surface. Keep them precise. Detailed procedures belong in the body or on-demand references.
+The `name`, `description`, and workflow body in `SKILL.md` remain authoritative. Do not hand-maintain a second copy in Worker code. MCP routing metadata and workflow content are regenerated from these files at build/deploy time.
 
-Installing the Pryzael plugin groups the eight skills into one installable experience. Individual skills remain self-contained and do not depend on files above their own skill root for runtime correctness.
+The MCP server itself performs no repository mutation or downstream tool action. If a returned Pryzael workflow calls for GitHub, browser, filesystem, or execution capabilities, those remain capabilities of the active ChatGPT/Codex host.
 
-## Architecture
+## Cloudflare deployment
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for:
+Pryzael targets a stateless Cloudflare Worker so ChatGPT can reach the MCP endpoint without a local machine or tunnel. Cloudflare Workers Builds can connect directly to this GitHub repository and deploy on push.
 
-- ChatGPT/Agent Skills loading boundaries;
-- soft composition and trigger precedence;
-- GitHub exact-head review semantics;
-- capability detection and read/write boundaries;
-- verification and audit contracts;
-- skills-only plugin packaging and validation rules.
+For the initial product gate the endpoint is intentionally read-only and unauthenticated because it exposes only public Pryzael workflow material. Authentication can be added after Chat-side MCP execution is proven if the deployment threat model requires it.
 
-See [`docs/WEBCHATGPT.md`](docs/WEBCHATGPT.md) for product-facing deployment notes and [`docs/PLUGIN.md`](docs/PLUGIN.md) for the OpenAI plugin path.
+See [`docs/MCP.md`](docs/MCP.md) for the exact deployment and qualification path.
 
 ## Validation
 
-The authoritative format validator is the Agent Skills `skills-ref` validator when available:
+Agent Skills validation:
 
 ```text
 skills-ref validate ./skills/architect
-```
-
-Pryzael also carries a lightweight repository check:
-
-```text
 python scripts/validate_skills.py
 ```
 
-It checks the subset of format and packaging invariants Pryzael relies on. It is not a replacement for the upstream validator or the OpenAI plugin submission scanner.
+Cloudflare Worker validation after dependency installation:
+
+```text
+npm run check
+```
+
+`npm run check` regenerates the derived MCP catalog and asks Wrangler to perform a dry-run bundle. Live qualification still requires a deployed `https://<worker>.workers.dev/mcp` endpoint and user-visible evidence that ChatGPT actually executed a Pryzael MCP tool. Plugin awareness alone is not sufficient.
 
 ## Provenance
 

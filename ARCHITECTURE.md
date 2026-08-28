@@ -2,78 +2,75 @@
 
 ## 1. Goal
 
-Pryzael packages engineering reasoning workflows as portable Agent Skills and distributes the current suite as a skills-only OpenAI plugin. The target is ChatGPT first while preserving compatibility with other Agent Skills clients where practical.
+Pryzael packages engineering reasoning workflows as portable Agent Skills and exposes the same workflows through a read-only remote MCP projection. ChatGPT is the primary product target while compatibility with other Agent Skills/MCP clients is preserved where practical.
 
-The design optimizes for five properties:
+The design optimizes for:
 
-1. **Portable activation.** Each skill is independently usable through its own `SKILL.md`.
-2. **Progressive disclosure.** Discovery metadata stays small; detailed, situational procedures move to references.
-3. **Evidence-bound claims.** Skills distinguish direct proof from static inference and use `INCONCLUSIVE` when decisive proof is unavailable.
-4. **Composable rigor.** Large workflows delegate named concerns to smaller skills instead of embedding copies of their procedures.
-5. **Zero Pryzael runtime infrastructure.** The plugin adds instructions/resources, not a hosted service.
+1. **Single workflow authority.** Each `skills/<name>/SKILL.md` remains canonical.
+2. **Multiple projections.** Native Skills and MCP tools are alternate ways to load the same workflow, not separate implementations.
+3. **Progressive disclosure.** Discovery metadata stays small; bodies and supporting resources load only after selection.
+4. **Evidence-bound claims.** Workflows distinguish proof from inference and use `INCONCLUSIVE` when decisive evidence is unavailable.
+5. **Minimal hosted runtime.** The remote MCP endpoint is stateless, read-only, and performs no external actions or model/API calls.
+6. **No local-PC dependency.** ChatGPT can reach Pryzael while the user's computer is offline.
 
-## 2. Runtime and packaging boundaries
+## 2. Authority boundaries
 
-There are two distinct authorities:
+There are three distinct authorities:
 
-- **Skill runtime authority:** each `skills/<name>/SKILL.md` plus files below that skill root.
-- **Plugin packaging authority:** `.codex-plugin/plugin.json`, which gives the collection a stable install identity and points at `./skills/`.
+- **Workflow authority:** each `skills/<name>/SKILL.md` plus files below that Skill root.
+- **MCP projection implementation:** `scripts/generate_mcp_catalog.mjs` plus `worker/index.mjs`.
+- **Plugin packaging authority:** `.codex-plugin/plugin.json`, which continues to describe the installable Skill collection.
 
-The plugin manifest does not redefine skill behavior. It must not duplicate detailed skill procedures, composition rules, or verification logic. Those remain in the skill packages.
+The build generator derives tool descriptions, workflow bodies, and package-local text resources from the canonical Skill packages. The Worker must not carry manually duplicated workflow text.
 
-A skill must not depend on files above its own root for runtime correctness because individual skills may be exported or installed independently. Repository files such as this document are development guidance, not skill runtime dependencies.
+Every Skill remains self-contained for native Skill clients and carries the upstream pstack notice.
 
-Every skill folder carries the upstream pstack license notice because an individual skill may be exported without the repository root.
-
-## 3. Plugin shape
-
-Pryzael uses the OpenAI **Skills only** plugin shape.
+## 3. Runtime shape
 
 ```text
-.codex-plugin/plugin.json
 skills/*/SKILL.md
-skills/*/references/   optional
-skills/*/assets/       optional
-skills/*/scripts/      optional
+skills/*/{references,assets,scripts}/   optional
+        |
+        | Cloudflare build step
+        v
+scripts/generate_mcp_catalog.mjs
+        |
+        v
+worker/generated/catalog.mjs           disposable derived artifact
+        |
+        v
+worker/index.mjs
+        |
+        v
+Cloudflare Workers /mcp
 ```
 
-The baseline must not contain or require:
+`wrangler.jsonc` is deployment configuration and `package.json` declares the minimal Worker/MCP build dependencies.
 
-- `.mcp.json` / `mcpServers`;
-- `.app.json` / `apps`;
-- Pryzael-owned OAuth;
-- an always-on service;
-- a database;
-- server-side telemetry;
-- UI that requires an MCP server;
-- hooks required for core ChatGPT behavior.
-
-OpenAI explicitly supports plugins made only of skills when instructions and tools already available to the model are sufficient. Pryzael fits that category.
-
-This architecture removes Pryzael-operated request quotas and hosting costs. It does not make ChatGPT, models, connectors, GitHub, or other third-party services unlimited; their own product limits still apply.
+The deployed runtime must not require a local process or tunnel, Durable Objects, KV/D1/R2/Queues/databases, Pryzael-owned model/API calls, GitHub Actions as request-path service, connector proxying, or server-side workflow state.
 
 ## 4. Discovery and trigger design
 
-Only short skill metadata should decide activation. Descriptions must say both what the skill does and when it should be used.
+For native Agent Skills, `name` and `description` in `SKILL.md` form the discovery surface.
 
-Trigger precedence for overlapping engineering tasks:
+For MCP, the build generator creates one tool per Skill and copies that same frontmatter `description` into the derived catalog. Hyphenated Skill names are converted only to underscore tool identifiers (`blast-radius` -> `blast_radius`); semantic trigger text is not duplicated in Worker source.
 
-1. **Large/cross-cutting/multi-phase or no narrow workflow fits:** `figure-it-out` owns orchestration.
-2. **Explicit review of a diff/PR/commit/design:** `interrogate` owns the review.
-3. **Debugging a failure/regression:** `fix-root-causes` owns diagnosis and repair reasoning.
-4. **Design before implementation across boundaries:** `architect` owns the design.
-5. **Hidden downstream-impact question:** `blast-radius` owns impact analysis.
-6. **Migration/sweep/staged sequence:** `sequence-verifiable-units` owns ordering.
-7. **Completion/proof question:** `prove-it-works` owns verification.
-8. **Audit/handoff/decision-log request:** `show-me-your-work` owns the trail.
+Trigger precedence remains guidance rather than a deterministic host promise:
 
-This precedence is routing guidance, not a promise that every Agent Skills client exposes deterministic priority controls. Descriptions are written to reduce ambiguous activation, and multiple skills may legitimately be loaded for one task.
+1. large/cross-cutting/multi-phase work with no sufficient narrow workflow -> `figure-it-out`;
+2. explicit artifact/design review -> `interrogate`;
+3. defect/regression diagnosis -> `fix-root-causes`;
+4. boundary design before implementation -> `architect`;
+5. downstream compatibility/impact -> `blast-radius`;
+6. migration/sweep/staged sequence -> `sequence-verifiable-units`;
+7. explicit completion/proof -> `prove-it-works`;
+8. audit/handoff/decision trail -> `show-me-your-work`.
 
-Plugin metadata is discovery/install-surface metadata only. Do not try to force skill routing through plugin-level descriptions.
+This remains subject to empirical routing qualification. The MCP transport must not introduce a second hidden router.
 
-## 5. Composition graph
+## 5. Composition
 
-Composition is intentionally directional to avoid recursive workflow loops.
+Composition stays directional and soft:
 
 ```text
 figure-it-out
@@ -86,184 +83,176 @@ figure-it-out
   -> prove-it-works
 
 architect
-  -> interrogate          optional design challenge
-  -> prove-it-works       final implementation proof when implementation occurs
+  -> interrogate
+  -> prove-it-works
 
 blast-radius
-  -> prove-it-works       decisive safety checks
+  -> prove-it-works
 
 sequence-verifiable-units
-  -> fix-root-causes      only when a unit fails for an unexplained reason
-  -> prove-it-works       per-unit and whole-sequence checks
+  -> fix-root-causes
+  -> prove-it-works
 
 interrogate
-  -> blast-radius         when hidden downstream effects are central
-  -> prove-it-works       when a finding needs decisive reproduction/proof
+  -> blast-radius
+  -> prove-it-works
 
 fix-root-causes
-  -> prove-it-works       prove symptom and violated invariant are repaired
+  -> prove-it-works
 
 show-me-your-work         leaf
 prove-it-works            leaf
 ```
 
-### Soft composition, not runtime linkage
+Neither Agent Skills nor MCP guarantees deterministic workflow-to-workflow composition. Each workflow must remain useful if a related workflow is not selected.
 
-The public Agent Skills model allows a client to use one or more relevant skills, but it does not define a portable API by which one `SKILL.md` synchronously invokes another by name.
+## 6. MCP projection contract
 
-Therefore Pryzael composition is **soft**:
+The generator runs at build/deploy time and:
 
-- a skill may state that another named skill should own a concern when that skill is available;
-- the client may activate both skills automatically, or the user/model may select the other skill explicitly;
-- the calling skill must still remain useful if the named skill is unavailable;
-- no runtime correctness may depend on a cross-skill filesystem reference;
-- composition must never recurse indefinitely.
+1. scans `skills/*/SKILL.md`;
+2. validates directory/name consistency;
+3. reads `name`, `description`, and body;
+4. collects text resources under `references/`, `assets/`, and `scripts/` without following symlinks;
+5. emits a disposable JavaScript catalog consumed by the Worker.
 
-A composed skill owns only its concern. The top-level workflow remains responsible for task state, evidence integration, and final handoff.
+The Worker creates one MCP tool per catalog entry. A normal call returns the selected Skill body and the list of bundled package-local text resources available for that Skill. When called with an exact advertised `resource` key, it returns that resource's text. Scripts are returned as text only and are never executed.
 
-## 6. Common capability contract
+MCP annotations are:
 
-Pryzael targets capability-variable environments.
+```text
+readOnlyHint: true
+destructiveHint: false
+idempotentHint: true
+openWorldHint: false
+```
 
-- Use only tools and connected sources actually available in the active session.
-- Repository read access is sufficient for static analysis. Writes are optional capabilities and require user intent plus connector support.
-- Do not infer that ChatGPT, GitHub, a terminal, browser control, subagents, or a specific model family is available merely because another client supports it.
-- Never report a command, test, build, runtime flow, independent reviewer, or write as completed unless it actually ran.
-- When the decisive observation cannot be made, preserve the exact missing check and return `INCONCLUSIVE` for that claim.
+The Worker itself does not perform the engineering task. It supplies the canonical workflow to the host model.
 
-A skills-only plugin must not smuggle a third-party connector in as an implicit hard dependency. GitHub-aware skills use GitHub only when an authorized GitHub capability is actually present. Otherwise they degrade transparently.
+## 7. Cloudflare execution model
 
-## 7. Verification semantics
+Pryzael uses the current minimal stateless MCP path from `@modelcontextprotocol/server` 2.0.0, including `createMcpHandler()`, with Streamable HTTP. The Agents SDK and Cloudflare-specific TypeScript definition package are intentionally not dependencies.
 
-Pryzael uses three claim states:
+The Worker exposes:
 
-- `VERIFIED`: evidence directly supports the predicate at a suitable level for the claim.
-- `NOT VERIFIED`: evidence contradicts the predicate or the required check failed.
-- `INCONCLUSIVE`: available evidence or capabilities cannot decide the predicate.
+```text
+/mcp       MCP protocol endpoint
+/health    service/version/tool-count health endpoint
+```
 
-A whole-task pass requires every required predicate to be `VERIFIED`. Static review may still produce a useful finding when runtime proof is unavailable, but it must not be mislabeled as runtime verification.
+A fresh MCP server instance is created per request. No protocol or workflow state is persisted between requests. Plain JavaScript is used deliberately so deployment correctness does not depend on the publication cadence of Cloudflare TypeScript definition packages.
 
-Evidence must be bound to the artifact identity it proves. For GitHub work, prefer repository plus exact commit SHA; branch names and PR numbers are context, not immutable identity.
+## 8. Capability contract
 
-## 8. GitHub exact-head review contract
+Pryzael is capability-variable:
 
-`interrogate` owns exact-head review. Its detailed algorithm lives in `skills/interrogate/references/github-exact-head-review.md` and should be loaded only for GitHub reviews where commit identity matters.
+- use only tools/connectors actually available in the active session;
+- repository writes require explicit user intent and a host capability that supports them;
+- do not claim tests, browser actions, runtime flows, independent reviews, or writes that did not occur;
+- when decisive evidence cannot be observed, preserve the missing check and use `INCONCLUSIVE`.
+
+The MCP endpoint does not expand those authorities. A returned workflow may call for GitHub or another host tool, but that tool remains separately authorized and supplied by the host.
+
+## 9. Verification semantics
+
+Pryzael uses:
+
+- `VERIFIED` — suitable evidence directly supports the predicate;
+- `NOT VERIFIED` — evidence contradicts it or a required check failed;
+- `INCONCLUSIVE` — available evidence/capabilities cannot decide it.
+
+A whole-task pass requires every required predicate to be `VERIFIED`. Evidence must be bound to the artifact it proves; for GitHub work prefer repository plus exact commit SHA over moving refs.
+
+Only practically observable user/product evidence may be used as qualification authority. Hidden package IDs, internal selector states, server traces unavailable to an ordinary user, or other unobservable internals must not be required as proof.
+
+## 10. GitHub exact-head review
+
+`interrogate` owns exact-head review. Its detailed contract remains in `skills/interrogate/references/github-exact-head-review.md`.
+
+Native Skill clients load that package-local reference on demand. MCP clients obtain the same reference through the `interrogate` tool's advertised resource key.
 
 Core invariant:
 
-> A review verdict applies to one explicitly bound base/candidate artifact pair. Moving branch or PR state must never silently replace that pair.
+> A verdict applies to one explicitly bound base/candidate artifact pair. Moving branch/PR state must never silently replace that pair.
 
-The review binds exact SHAs, verifies expected ancestry/comparison semantics, reads changed and contextual files at explicit SHAs, keys CI evidence to the candidate SHA, and rechecks moving PR/branch identity before reporting current-state claims.
+## 11. GitHub connector boundary
 
-## 9. GitHub connector architecture
+Pryzael uses GitHub operation semantics rather than hard-coded host-internal tool names. The MCP Worker does not proxy GitHub and never receives GitHub credentials. Host-provided repository reads/writes remain separately authorized capabilities.
 
-Pryzael uses operation semantics rather than hard-coded internal tool names because ChatGPT surfaces and connector implementations can change.
+## 12. Decision trails
 
-Required read operations for a strong exact-head review are conceptually:
+`show-me-your-work` owns decision/evidence trail semantics. The logical fields remain `ts`, `phase`, `decision`, `why`, `evidence`, `result`. Its TSV template is bundled as a package-local MCP resource and remains a native Skill asset.
 
-- resolve repository;
-- resolve commit objects;
-- read PR metadata when a PR is part of the task;
-- compare exact base and candidate commits and inspect ancestry/status;
-- enumerate changed paths;
-- read file content at an exact commit;
-- read commit-bound checks/workflow evidence when relevant;
-- re-read moving context before claiming a verdict applies to the current PR/branch tip.
+## 13. Source and licensing
 
-Optional write operations are outside review semantics. `interrogate` is read-only by default even if the active connector exposes writes.
+Pryzael is adapted from MIT-licensed pstack material. Each Skill carries `LICENSE.pstack.txt` so the upstream notice survives independent export. MCP exposure does not change that provenance boundary.
 
-Search is useful for discovery but is not identity authority. Once a path/ref is known, fetch it directly at the bound SHA.
+## 14. Validation
 
-The skills-only plugin does not attempt to embed, proxy, or resubmit the existing GitHub integration. The GitHub connector remains a separately authorized capability supplied by the host environment.
+Validation has four layers:
 
-## 10. Decision trails
+1. upstream Agent Skills validation when available;
+2. `python scripts/validate_skills.py` for Pryzael Skill-package invariants;
+3. generated-catalog plus Wrangler dry-run bundle validation;
+4. live Cloudflare endpoint and ChatGPT product-surface qualification.
 
-`show-me-your-work` owns audit-trail semantics. Other skills should not invent alternate log schemas.
+Expected Worker check after dependencies are installed:
 
-The canonical logical fields are:
+```text
+npm run check
+```
 
-`ts`, `phase`, `decision`, `why`, `evidence`, `result`.
+Important invariants:
 
-The durable representation may be TSV when a writable artifact surface exists. When persistence is unavailable, the same schema can be returned in the conversation without pretending a durable file was written.
+- `.codex-plugin/plugin.json` remains valid and points to `./skills/`;
+- Worker tool descriptions and bodies are generated from canonical Skills;
+- runtime performs no filesystem scan, downstream network/API call, or persistent-state access;
+- package resources cannot be invented by the caller and are limited to generated catalog keys;
+- a Skill change requires no manual parallel edit to MCP workflow text;
+- deployability does not depend on Cloudflare's separately versioned TypeScript definitions.
 
-## 11. Source and licensing boundary
+Static checks cannot prove that a particular ChatGPT surface will expose or execute the MCP tools. Only observable behavior on that product surface can establish that.
 
-Pryzael is adapted from MIT-licensed pstack material. Repository-level notices are insufficient for independently exported skills, so each skill folder includes the upstream notice. `metadata` carries provenance using Agent Skills-compatible string key/value entries rather than non-standard top-level YAML keys.
+## 15. Distribution and deployment
 
-The plugin manifest is packaging metadata for the Pryzael collection. It does not replace the per-skill upstream notices.
+GitHub remains development source of truth. Cloudflare Workers is the live MCP runtime.
 
-## 12. Validation
+### Native Skill path
 
-Validation has three layers:
+Individual Skills may still be uploaded/installed on ChatGPT surfaces that support Personal Skills. No MCP endpoint is needed for that path.
 
-1. Run the upstream Agent Skills validator when available.
-2. Run `scripts/validate_skills.py` to catch Pryzael-specific skill drift such as unsupported frontmatter keys, directory/name mismatch, missing upstream notice, oversized `SKILL.md`, and broken local resource references.
-3. Treat the OpenAI plugin upload/submission validator and skill security scanner as the authority for public plugin packaging constraints.
+### Remote MCP path
 
-Important skills-only package invariants include:
+Cloudflare Workers Builds connects to the GitHub repository, runs the generator during Wrangler's custom build, and deploys the Worker to a `workers.dev` hostname. The exact hostname is deployment output and must not be guessed in advance.
 
-- `.codex-plugin/plugin.json` exists and is valid JSON;
-- `skills` resolves to `./skills/`;
-- at least one valid `skills/<name>/SKILL.md` exists;
-- no `mcpServers`, `.mcp.json`, `apps`, or `.app.json` are introduced into the skills-only package;
-- no screenshots are declared for the skills-only submission;
-- new releases increment the plugin manifest version.
+The ChatGPT developer Plugin connection uses the resulting:
 
-The local validator deliberately avoids pretending to replace OpenAI's submission-time normalization, security scans, or review.
+```text
+https://<actual-worker-hostname>/mcp
+```
 
-## 13. Distribution and WebChatGPT path
+### Authentication
 
-### Source and versioning
+Initial qualification uses an unauthenticated endpoint because the Worker serves only public repository workflow text and performs no external action. If live Chat-side execution succeeds, reassess whether OAuth or another supported authorization boundary is warranted before broader exposure.
 
-GitHub is the development source of truth. It is not a live backend in the plugin request path.
+## 16. Infrastructure decision
 
-### Local evaluation
+The MCP architecture intentionally introduces one hosted runtime authority: a stateless Cloudflare Worker.
 
-OpenAI's documented local marketplace flow is supported by the ChatGPT desktop app and Codex tooling. Use it for activation and regression evaluation when available. It is not required for the final Web runtime.
+Allowed runtime:
 
-### Web distribution
+```text
+Cloudflare Workers
+  -> stateless /mcp
+  -> generated public Pryzael workflow catalog
+```
 
-The zero-server Web path is:
+Still excluded unless future evidence requires them: local always-on processes/tunnels, duplicate hosts, Durable Objects/stateful MCP sessions, KV/D1/R2/Queues/databases, GitHub Actions as runtime, Pryzael model/API calls, or connector credential proxying.
 
-1. package the repository as a plugin ZIP;
-2. open the OpenAI plugin submission portal;
-3. choose **Skills only**;
-4. upload the package;
-5. select a verified developer/business identity and complete required listing fields;
-6. pass bundled-skill safety/security scans and review;
-7. publish the approved version to the universal Plugins Directory.
+Cloudflare plan limits remain external product constraints. Pryzael does not claim that those services are unlimited.
 
-A skills-only public submission does not require an MCP server URL, MCP domain verification, OAuth, or a hosted Pryzael service. Under the current submission rules, website/support/privacy/terms URLs are optional for skills-only submissions.
+## 17. Non-goals
 
-The ChatGPT **New plugin** dialog that asks for a server URL is the developer-mode MCP connection path. It is not the installation/submission path for a skills-only package.
+Pryzael is not a durable workflow/transaction engine, GitHub proxy, autonomous background service, promise that subagents/browser control exist, replacement for tests/CI, guarantee every ChatGPT surface can call unpublished MCP plugins, or guarantee of unlimited ChatGPT/Cloudflare usage.
 
-## 14. Infrastructure decision
-
-Strictly exclude hosted runtime designs from the Pryzael baseline when they only reproduce behavior that skills and existing host tools can already provide.
-
-Rejected baseline dependencies include:
-
-- Vercel/Netlify/Cloudflare serverless functions;
-- GitHub Actions as a runtime service;
-- tunnels;
-- self-hosted always-on MCP processes;
-- paid or free-tier databases;
-- OpenAI API calls made by Pryzael infrastructure.
-
-Free tiers are not equivalent to unbounded infrastructure; they have quotas, cold starts, suspension rules, or operational limits. The skills-only plugin avoids this class of dependency entirely.
-
-If a future use case genuinely requires Pryzael-owned live data or controlled actions, introducing MCP is an architectural fork and must justify the new runtime authority, cost model, availability model, authentication boundary, and verification surface.
-
-## 15. Non-goals
-
-Pryzael is not:
-
-- a durable workflow engine;
-- a transaction/authority store;
-- a promise that background execution or subagents exist;
-- a replacement for repository-native tests or CI;
-- a replacement for existing GitHub/Drive/etc. connectors;
-- a guarantee of unlimited ChatGPT/model/connector usage;
-- a guarantee that every ChatGPT plan or client can install unpublished local plugins.
-
-It is a portable reasoning and verification layer packaged as a zero-infrastructure skills-only plugin, designed to integrate with stronger external authority and execution systems when they already exist.
+It is a portable engineering workflow layer with native Skill and remote MCP projections from one canonical source.
