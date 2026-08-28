@@ -12,11 +12,10 @@
     "mcp"
   ],
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Pryzael",
     "shortDescription": "Engineering rigor for AI work",
-    "longDescription": "Reusable engineering workflows for architecture design, root-cause debugging, blast-radius analysis, adversarial review, verifiable multi-step execution, proof of completion, and auditable handoffs. The same workflow sources are exposed as Agent Skills and read-only MCP tools.",
+    "longDescription": "Reusable engineering workflows for architecture design, root-cause debugging, blast-radius analysis, adversarial review, verifiable multi-step execution, proof of completion, and auditable handoffs. The canonical skill workflows are also projected as read-only remote MCP tools by the hosted Pryzael Worker.",
     "category": "Developer Tools",
     "capabilities": [
       "Architecture design",
@@ -25,7 +24,7 @@
       "Blast-radius analysis",
       "Verification planning",
       "Auditable engineering handoffs",
-      "Read-only MCP workflow tools"
+      "Read-only remote MCP workflow tools"
     ],
     "defaultPrompt": [
       "Architect this change before implementation and identify the invariants.",
