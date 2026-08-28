@@ -75,7 +75,7 @@ function listTextResources(skillDir) {
   const resources = [];
   for (const rootName of RESOURCE_ROOTS) {
     const root = path.join(skillDir, rootName);
-    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) continue;
+    if (!fs.existsSync(root) || !fs.lstatSync(root).isDirectory()) continue;
     const stack = [root];
     while (stack.length > 0) {
       const current = stack.pop();
@@ -108,7 +108,7 @@ function titleForSkill(name) {
 
 export function loadCatalog(root = pluginRoot()) {
   const skillsDir = path.join(root, "skills");
-  if (!fs.existsSync(skillsDir) || !fs.statSync(skillsDir).isDirectory()) {
+  if (!fs.existsSync(skillsDir) || !fs.lstatSync(skillsDir).isDirectory()) {
     throw new Error(`Skills directory not found: ${skillsDir}`);
   }
 
@@ -119,7 +119,12 @@ export function loadCatalog(root = pluginRoot()) {
     .sort((a, b) => a.name.localeCompare(b.name))) {
     const skillDir = path.join(skillsDir, entry.name);
     const skillPath = path.join(skillDir, "SKILL.md");
-    if (!fs.existsSync(skillPath)) continue;
+    if (
+      !fs.existsSync(skillPath) ||
+      !fs.lstatSync(skillPath).isFile()
+    ) {
+      continue;
+    }
     const skill = parseSkillMarkdown(fs.readFileSync(skillPath, "utf8"));
     if (skill.name !== entry.name) {
       throw new Error(`Skill directory/name mismatch: ${entry.name} != ${skill.name}`);
@@ -203,6 +208,9 @@ function resourceResult(skill, resource) {
   const relative = path.relative(skill.skillDir, absolute);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error("Resource path escapes the skill directory.");
+  }
+  if (!fs.lstatSync(absolute).isFile()) {
+    throw new Error("Resource must be a regular file.");
   }
   const text = fs.readFileSync(absolute, "utf8");
   return {
