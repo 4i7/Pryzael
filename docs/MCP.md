@@ -17,7 +17,10 @@ skills/*/SKILL.md
       |
       | build-time generation
       v
-worker/generated/catalog.ts
+worker/generated/catalog.mjs
+      |
+      v
+worker/index.mjs
       |
       v
 Cloudflare Worker
@@ -65,21 +68,9 @@ Only generated, package-local resource keys are accepted. Scripts are returned a
 
 Pryzael uses a stateless Worker rather than a local stdio process or tunnel because the intended ChatGPT surface must remain usable when the user's PC is off.
 
-The deployment deliberately does not use:
+The deployment deliberately does not use Durable Objects, KV, D1, R2, Queues, scheduled jobs, hosted databases, OpenAI API calls, a local tunnel, or an always-on PC. The only runtime is the Worker request itself.
 
-- Durable Objects;
-- KV;
-- D1;
-- R2;
-- Queues;
-- scheduled jobs;
-- hosted databases;
-- OpenAI API calls;
-- a local tunnel or always-on PC.
-
-The only runtime is the Worker request itself.
-
-Cloudflare's current recommended path for a new stateless MCP server is `createMcpHandler()` with Streamable HTTP. The Pryzael Worker follows that model.
+Cloudflare's current minimal stateless MCP example uses `@modelcontextprotocol/server` directly. Pryzael follows that smaller path rather than depending on the Agents SDK. The Worker is plain JavaScript, so deployment also does not depend on Cloudflare's separately versioned TypeScript definitions.
 
 ## Build path
 
@@ -89,19 +80,28 @@ Wrangler runs the custom build command declared in `wrangler.jsonc` before bundl
 npm run generate:mcp-catalog
 ```
 
-That command reads the canonical Skill files and generates `worker/generated/catalog.ts`. The generated file is not an independent authority and should not be edited by hand.
+That command reads the canonical Skill files and generates `worker/generated/catalog.mjs`. The generated file is not an independent authority and should not be edited by hand.
+
+The runtime dependency surface is intentionally small:
+
+```text
+@modelcontextprotocol/server 2.0.0
+zod
+```
+
+Wrangler is a build/deploy dependency only.
 
 ## GitHub -> Cloudflare deployment
 
 The preferred deployment path is Cloudflare Workers Builds connected directly to `4i7/Pryzael`:
 
-1. In Cloudflare Dashboard open **Workers & Pages** (the dashboard may group this under **Compute**).
-2. Choose **Create application** / **Import a repository**. If the account home shows **Ship something new**, that leads to the same Worker creation flow.
+1. In Cloudflare Dashboard open **Workers & Pages** / **Compute**.
+2. Choose **Create application** / **Import a repository**.
 3. Connect GitHub and select `4i7/Pryzael`.
 4. Set the Worker project name to `pryzael` so it matches `wrangler.jsonc`.
 5. Set the production branch to `mcp/read-only-workflow-bridge` while qualification is in progress. Do not point production at `main` yet.
 6. Use the repository root as the project root.
-7. The deploy command may remain the Workers Builds default `npx wrangler deploy`; Wrangler runs the configured custom catalog build automatically.
+7. Use `npx wrangler deploy` as the deploy command. Wrangler runs the configured catalog generation automatically.
 8. Deploy and record the user-visible `*.workers.dev` hostname.
 
 The resulting MCP URL is:
@@ -122,13 +122,23 @@ Do not guess either hostname before Cloudflare displays it.
 
 The initial product-gate deployment is unauthenticated. It serves only public Pryzael workflow text and performs no mutation or external action. This minimizes moving parts while determining whether the target Chat surface can actually execute the MCP tools.
 
-If Chat-side execution succeeds and the service is retained, reassess exposure and add OAuth or another supported authorization layer if needed. Authentication must not be added merely as ceremony before the basic product path is proven.
+If Chat-side execution succeeds and the service is retained, reassess exposure and add OAuth or another supported authorization layer if needed.
 
 ## Free-plan boundary
 
-As of the current Cloudflare Workers Free limits, the account receives 100,000 Worker requests per day and 10 ms CPU time per invocation. Pryzael is intentionally stateless and performs no network/database subrequests, so ordinary personal interactive use is expected to remain far below the request quota. The build-time catalog also avoids filesystem parsing or large schema construction during each request.
+Cloudflare product limits are external to Pryzael. The Worker is intentionally stateless and performs no network/database subrequests, so ordinary personal interactive use should remain far below the request allowance. The build-time catalog also avoids filesystem parsing or dynamic Skill discovery during each request.
 
-These are Cloudflare product limits, not Pryzael guarantees. Qualification should use the limits visible in the user's actual Cloudflare account/dashboard when operational decisions depend on them.
+Qualification should use limits visible in the user's actual Cloudflare account/dashboard when operational decisions depend on them.
+
+## Validation
+
+After dependency installation:
+
+```text
+npm run check
+```
+
+This regenerates the catalog and runs `wrangler deploy --dry-run`. Passing the dry run proves only that the current source can be bundled; it does not prove the live endpoint or ChatGPT product path.
 
 ## ChatGPT qualification
 
