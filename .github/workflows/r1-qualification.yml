@@ -19,9 +19,17 @@ permissions:
 jobs:
   qualify:
     runs-on: ubuntu-latest
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+
+      - name: Prove exact candidate checkout
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Set up Node
         uses: actions/setup-node@v4
