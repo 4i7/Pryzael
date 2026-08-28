@@ -1,18 +1,38 @@
-# Pryzael MCP bridge
+# Pryzael remote MCP
 
 ## Purpose
 
-The MCP bridge exposes the existing Pryzael Skill catalog as read-only MCP workflow tools. It exists to make the same engineering workflows reachable on ChatGPT/Codex surfaces where MCP tools are available even when native Personal Skill execution is not.
+Pryzael exposes the existing Skill catalog as read-only MCP workflow tools so ChatGPT surfaces that can call MCP tools can use the same engineering workflows even when native Personal Skill execution is unavailable.
 
 The invariant is:
 
-> `skills/<name>/SKILL.md` remains workflow authority. MCP is only a projection of that package.
+> `skills/<name>/SKILL.md` remains workflow authority. The Worker is a build-time projection of that package.
 
-The adapter contains no copied Skill descriptions or workflow bodies.
+There is no separately maintained MCP workflow copy.
+
+## Runtime architecture
+
+```text
+skills/*/SKILL.md
+      |
+      | build-time generation
+      v
+worker/generated/catalog.ts
+      |
+      v
+Cloudflare Worker
+  /mcp     stateless Streamable HTTP MCP
+  /health  version/tool-count health endpoint
+      |
+      v
+ChatGPT Plugin connection
+```
+
+The generated catalog is disposable output. The canonical source is always the Skill package.
 
 ## Tool model
 
-At `tools/list`, `mcp/server.mjs` scans `skills/*/SKILL.md` and creates one tool per Skill:
+One MCP tool is generated per Skill:
 
 | Skill | MCP tool |
 |---|---|
@@ -25,13 +45,13 @@ At `tools/list`, `mcp/server.mjs` scans `skills/*/SKILL.md` and creates one tool
 | `sequence-verifiable-units` | `sequence_verifiable_units` |
 | `show-me-your-work` | `show_me_your_work` |
 
-The MCP tool description is the corresponding Skill frontmatter `description`. A normal call takes no required arguments and returns the Skill body as workflow guidance.
+The tool description is the corresponding Skill frontmatter `description`. A normal call returns the Skill body as workflow guidance.
 
-Every tool is annotated read-only, non-destructive, idempotent, and closed-world. The server itself performs no repository/tool action on behalf of the workflow; any GitHub, browser, file, or execution capability mentioned by the returned Skill remains the responsibility of the active ChatGPT/Codex host.
+Every tool is annotated read-only, non-destructive, idempotent, and closed-world. The Worker does not perform repository mutations, external API calls, model calls, or downstream connector actions on behalf of the workflow.
 
 ## Package-local resources
 
-The adapter discovers text files beneath a Skill's `references/`, `assets/`, and `scripts/` directories. A first workflow call reports the available resource paths. If the workflow needs one, call the same tool again with:
+At build time the generator bundles text files beneath each Skill's `references/`, `assets/`, and `scripts/` directories. A first workflow call reports the available resource paths. If the workflow needs one, call the same tool again with:
 
 ```json
 {
@@ -39,79 +59,81 @@ The adapter discovers text files beneath a Skill's `references/`, `assets/`, and
 }
 ```
 
-The path must exactly match a resource reported for that Skill. The server does not follow arbitrary paths or execute package scripts.
+Only generated, package-local resource keys are accepted. Scripts are returned as text; the Worker does not execute them.
 
-## Local stdio MCP
+## Why Cloudflare Workers
 
-Requirements:
+Pryzael uses a stateless Worker rather than a local stdio process or tunnel because the intended ChatGPT surface must remain usable when the user's PC is off.
 
-- Node.js with ES module support (current Node LTS is sufficient);
-- a local Pryzael checkout/package.
+The deployment deliberately does not use:
 
-Start directly:
+- Durable Objects;
+- KV;
+- D1;
+- R2;
+- Queues;
+- scheduled jobs;
+- hosted databases;
+- OpenAI API calls;
+- a local tunnel or always-on PC.
 
-```text
-node mcp/server.mjs
-```
+The only runtime is the Worker request itself.
 
-The plugin's `.mcp.json` contains the equivalent bundled server definition:
+Cloudflare's current recommended path for a new stateless MCP server is `createMcpHandler()` with Streamable HTTP. The Pryzael Worker follows that model.
 
-```json
-{
-  "mcpServers": {
-    "pryzael": {
-      "cwd": ".",
-      "command": "node",
-      "args": ["./mcp/server.mjs"]
-    }
-  }
-}
-```
+## Build path
 
-Run the protocol smoke test:
+Wrangler runs the custom build command declared in `wrangler.jsonc` before bundling:
 
 ```text
-node --test mcp/server.test.mjs
+npm run generate:mcp-catalog
 ```
 
-No npm install is required.
+That command reads the canonical Skill files and generates `worker/generated/catalog.ts`. The generated file is not an independent authority and should not be edited by hand.
 
-## ChatGPT Web without third-party hosting
+## GitHub -> Cloudflare deployment
 
-A remote ChatGPT product cannot connect directly to a local stdio process. For development/testing, use OpenAI's Secure MCP Tunnel when that feature is available to the account/workspace. The tunnel-client documentation describes a `sample_mcp_stdio_local` profile that launches a local MCP command and bridges it to an OpenAI-hosted tunnel endpoint.
+The preferred deployment path is Cloudflare Workers Builds connected directly to `4i7/Pryzael`:
 
-On Windows/PowerShell the flow is conceptually:
+1. In Cloudflare Dashboard open **Workers & Pages**.
+2. Create an application by importing a repository.
+3. Connect GitHub and select `4i7/Pryzael`.
+4. Set the Worker project name to `pryzael` so it matches `wrangler.jsonc`.
+5. Select the MCP branch while qualification is in progress; switch production branch only after the candidate is accepted.
+6. Use the repository root as the project root.
+7. The deploy command may remain the Workers Builds default `npx wrangler deploy`; Wrangler runs the configured custom catalog build automatically.
+8. Deploy and record the user-visible `*.workers.dev` hostname.
 
-```powershell
-$env:CONTROL_PLANE_API_KEY = "<runtime key>"
+The resulting MCP URL is:
 
-tunnel-client init `
-  --sample sample_mcp_stdio_local `
-  --profile pryzael `
-  --tunnel-id <tunnel id> `
-  --mcp-command "node C:\path\to\Pryzael\mcp\server.mjs"
-
-tunnel-client doctor --profile pryzael --explain
-tunnel-client run --profile pryzael
+```text
+https://<assigned-worker-hostname>/mcp
 ```
 
-Create/inspect the tunnel ID, runtime credentials, and ChatGPT connector/plugin endpoint only through the OpenAI UI/CLI surfaces actually available to the user. Do not guess hidden endpoint IDs or treat unobservable internal state as evidence.
+The health URL is:
 
-Keep `tunnel-client run` alive while ChatGPT is discovering or calling the MCP tools. Stop it when Pryzael is not in use. Pryzael does not require a third-party hosting account, database, or always-on service.
+```text
+https://<assigned-worker-hostname>/health
+```
 
-Secure MCP Tunnel availability, permissions, and product limits are controlled by OpenAI and are not properties Pryzael can guarantee.
+Do not guess either hostname before Cloudflare displays it.
 
-## Public deployment
+## Authentication decision
 
-A future public-directory MCP plugin may require a stable HTTPS MCP endpoint and the associated OpenAI submission/domain/auth requirements. That is deliberately outside the current local/no-hosting architecture. Do not add a hosted backend merely to reproduce the local bridge until Chat-side MCP usefulness has been established empirically.
+The initial product-gate deployment is unauthenticated. It serves only public Pryzael workflow text and performs no mutation or external action. This minimizes moving parts while determining whether the target Chat surface can actually execute the MCP tools.
 
-## Observable qualification
+If Chat-side execution succeeds and the service is retained, reassess exposure and add OAuth or another supported authorization layer if needed. Authentication must not be added merely as ceremony before the basic product path is proven.
 
-For ChatGPT qualification, only user-visible facts count. Useful evidence includes a visible tool execution/card or other product-provided indication that the MCP tool was actually called and its result used.
+## Free-plan boundary
 
-Do not use as proof:
+As of the current Cloudflare Workers Free limits, the account receives 100,000 Worker requests per day and 10 ms CPU time per invocation. Pryzael is intentionally stateless and performs no network/database subrequests, so ordinary personal interactive use is expected to remain far below the request quota. The build-time catalog also avoids filesystem parsing or large schema construction during each request.
 
-- guessed internal selector state;
-- hidden package hashes/IDs unavailable to a normal user;
-- model claims that a plugin exists without an observable MCP call;
-- an MCP tool result that was never visibly executed.
+These are Cloudflare product limits, not Pryzael guarantees. Qualification should use the limits visible in the user's actual Cloudflare account/dashboard when operational decisions depend on them.
+
+## ChatGPT qualification
+
+Create a ChatGPT Plugin connection using the exact `/mcp` URL shown by the deployed Worker.
+
+The product gate is satisfied only by ordinary user-visible evidence that ChatGPT actually executed a Pryzael MCP tool and used its result. Plugin existence/awareness alone is not execution proof.
+
+Do not require or infer hidden package IDs, hidden routing state, private server-side traces unavailable to an ordinary user, or any other practically unobservable data as evidence.
