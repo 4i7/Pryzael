@@ -7,7 +7,7 @@
     "generate:mcp-catalog": "node scripts/generate_mcp_catalog.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "npm run generate:mcp-catalog && tsc --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
