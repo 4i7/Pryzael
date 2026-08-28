@@ -1,61 +1,56 @@
-# Pryzael as a Skills + MCP plugin
+# Pryzael as Skills + remote MCP
 
-Pryzael packages one canonical workflow catalog in two forms:
+Pryzael keeps one canonical workflow catalog and exposes it through two product paths:
 
 ```text
 skills/*/SKILL.md        native Agent Skills
         |
-        +--> MCP projection generated at runtime
-              .mcp.json
-              mcp/server.mjs
+        +--> build-time generated MCP catalog
+              |
+              +--> stateless Cloudflare Worker /mcp
 ```
-
-OpenAI plugin packaging supports Skills and MCP together. Pryzael uses that shape so native Skill clients and MCP-capable ChatGPT/Codex surfaces can reach the same workflows without maintaining two instruction sets.
 
 ## Authority boundary
 
-The eight `skills/<name>/SKILL.md` packages remain authoritative. The MCP server discovers `name`, `description`, body text, and package-local text resources from those directories on each request.
+The eight `skills/<name>/SKILL.md` packages remain authoritative. `scripts/generate_mcp_catalog.mjs` derives MCP tool metadata, bodies, and package-local text resources from those files during Worker build/deploy.
 
-Do not hard-code a second copy of Skill descriptions or workflow instructions in MCP code. A Skill edit should automatically change the corresponding MCP projection.
+Do not hand-maintain a second copy of Skill descriptions or workflow instructions in Worker code.
 
-`.codex-plugin/plugin.json` is packaging authority and points to both:
-
-```json
-{
-  "skills": "./skills/",
-  "mcpServers": "./.mcp.json"
-}
-```
+`.codex-plugin/plugin.json` remains the packaging manifest for the Skill collection. The hosted MCP endpoint is deployed from the same repository but is connected to ChatGPT by its actual HTTPS server URI rather than by a local `.mcp.json` process definition.
 
 ## Runtime boundary
 
-The bundled MCP server is intentionally narrow:
+The Cloudflare Worker is intentionally narrow:
 
-- local stdio only;
-- read-only package access;
-- no network requests;
+- stateless Streamable HTTP MCP;
+- read-only public workflow content;
+- no downstream network/API calls;
 - no writes;
-- no database;
-- no OAuth or secrets;
+- no database or persistent state;
+- no GitHub or connector credential proxying;
 - no OpenAI API/model calls;
-- no proxying of GitHub or other connectors.
+- no local-PC or tunnel dependency.
 
-The workflow returned by an MCP tool may tell the host model to use capabilities available in the active session. That does not make those capabilities part of the MCP server.
+A workflow returned by an MCP tool may instruct the host model to use capabilities available in the active session. Those capabilities remain outside the Pryzael MCP server.
 
 ## ChatGPT development path
 
-For Web ChatGPT development, connect the local stdio server through a supported MCP endpoint. OpenAI Secure MCP Tunnel is the preferred no-third-party-hosting path when available: run the local MCP server/tunnel only while testing or using Pryzael.
+Deploy the Worker through Cloudflare Workers Builds, obtain the actual `workers.dev` hostname shown by Cloudflare, and create a ChatGPT developer Plugin connection to:
+
+```text
+https://<actual-worker-hostname>/mcp
+```
 
 See [`MCP.md`](MCP.md) for setup.
 
-Product support must be established by an observable MCP tool execution on the target ChatGPT surface. Plugin installation/awareness by itself is not sufficient proof.
+Product support is established only by ordinary user-visible evidence that the target ChatGPT surface executed a Pryzael MCP tool. Installation or plugin awareness by itself is insufficient.
 
-## Distribution
+## Authentication
 
-The current repository is suitable as a Skills + MCP plugin source package and as a local bundled-MCP plugin for clients that support `.mcp.json` lifecycle configuration.
-
-A public ChatGPT directory submission with MCP may require a stable public HTTPS MCP endpoint, domain verification, authentication declarations, or other current submission requirements. That is a separate deployment decision and is not required for local MCP qualification.
+Initial qualification is intentionally unauthenticated because the endpoint serves only public repository workflow material and has no mutation capability. If live Chat execution is successful and the endpoint will be retained or shared, reassess OAuth/authorization separately.
 
 ## Cost boundary
 
-Pryzael does not add a hosted request-path service. The local bridge has no per-request Pryzael charge and no third-party free-tier quota. ChatGPT/OpenAI product limits and Secure MCP Tunnel availability remain external constraints.
+The hosted runtime uses Cloudflare Workers. Its limits and pricing are external Cloudflare product properties rather than Pryzael guarantees. The architecture avoids additional metered services such as D1, KV, R2, Durable Objects, hosted databases, or model/API calls.
+
+For personal interactive use, the Worker is designed to stay far below the current Free-plan request allowance by doing only in-memory MCP catalog lookup and response construction at request time.
