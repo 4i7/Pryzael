@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
-const OUTPUT = path.join(ROOT, "worker", "generated", "catalog.ts");
+const OUTPUT = path.join(ROOT, "worker", "generated", "catalog.mjs");
 const RESOURCE_ROOTS = new Set(["references", "assets", "scripts"]);
 const TEXT_EXTENSIONS = new Set([
   ".md", ".txt", ".tsv", ".csv", ".json", ".yaml", ".yml", ".toml",
@@ -90,6 +90,6 @@ for (const entry of fs.readdirSync(SKILLS_DIR, { withFileTypes: true }).filter((
 if (catalog.length === 0) throw new Error("No Pryzael skills found");
 
 fs.mkdirSync(path.dirname(OUTPUT), { recursive: true });
-const source = `// GENERATED FILE. Do not edit. Source: skills/*/SKILL.md and skill-local resources.\n\nexport const PRYZAEL_VERSION = "0.2.0";\nexport const CATALOG = ${JSON.stringify(catalog, null, 2)} as const;\n`;
+const source = `// GENERATED FILE. Do not edit. Source: skills/*/SKILL.md and skill-local resources.\n\nexport const PRYZAEL_VERSION = "0.2.0";\nexport const CATALOG = ${JSON.stringify(catalog, null, 2)};\n`;
 fs.writeFileSync(OUTPUT, source, "utf8");
 console.log(`Generated ${catalog.length} MCP tools at ${path.relative(ROOT, OUTPUT)}`);
