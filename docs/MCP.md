@@ -95,11 +95,11 @@ That command reads the canonical Skill files and generates `worker/generated/cat
 
 The preferred deployment path is Cloudflare Workers Builds connected directly to `4i7/Pryzael`:
 
-1. In Cloudflare Dashboard open **Workers & Pages**.
-2. Create an application by importing a repository.
+1. In Cloudflare Dashboard open **Workers & Pages** (the dashboard may group this under **Compute**).
+2. Choose **Create application** / **Import a repository**. If the account home shows **Ship something new**, that leads to the same Worker creation flow.
 3. Connect GitHub and select `4i7/Pryzael`.
 4. Set the Worker project name to `pryzael` so it matches `wrangler.jsonc`.
-5. Select the MCP branch while qualification is in progress; switch production branch only after the candidate is accepted.
+5. Set the production branch to `mcp/read-only-workflow-bridge` while qualification is in progress. Do not point production at `main` yet.
 6. Use the repository root as the project root.
 7. The deploy command may remain the Workers Builds default `npx wrangler deploy`; Wrangler runs the configured custom catalog build automatically.
 8. Deploy and record the user-visible `*.workers.dev` hostname.
