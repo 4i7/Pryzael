@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ordinalCompare } from "./deterministic_order.mjs";
+import { parseCanonicalSkillMarkdown, projectCanonicalSkill } from "./skill_package.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
@@ -13,46 +14,6 @@ const TEXT_EXTENSIONS = new Set([
   ".md", ".txt", ".tsv", ".csv", ".json", ".yaml", ".yml", ".toml",
   ".ini", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
 ]);
-
-function parseScalar(raw) {
-  const value = raw.trim();
-  if (value.startsWith('"') && value.endsWith('"')) return JSON.parse(value);
-  if (value.startsWith("'") && value.endsWith("'")) {
-    return value.slice(1, -1).replace(/''/g, "'");
-  }
-  return value;
-}
-
-function parseSkill(markdown, directoryName) {
-  const normalized = markdown.replace(/\r\n/g, "\n");
-  if (!normalized.startsWith("---\n")) throw new Error(`${directoryName}: missing YAML frontmatter`);
-  const end = normalized.indexOf("\n---\n", 4);
-  if (end === -1) throw new Error(`${directoryName}: unterminated YAML frontmatter`);
-
-  const metadata = {};
-  for (const line of normalized.slice(4, end).split("\n")) {
-    if (/^\s/.test(line)) continue;
-    const separator = line.indexOf(":");
-    if (separator === -1) continue;
-    const key = line.slice(0, separator).trim();
-    if (key === "name" || key === "description") {
-      metadata[key] = parseScalar(line.slice(separator + 1));
-    }
-  }
-
-  if (metadata.name !== directoryName) {
-    throw new Error(`${directoryName}: frontmatter name must match directory`);
-  }
-  if (typeof metadata.description !== "string" || metadata.description.length === 0) {
-    throw new Error(`${directoryName}: missing description`);
-  }
-
-  return {
-    name: metadata.name,
-    description: metadata.description,
-    body: normalized.slice(end + 5).trim(),
-  };
-}
 
 function collectResources(skillDir) {
   const resources = {};
@@ -89,7 +50,8 @@ for (const entry of fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
   .filter((item) => item.isDirectory())
   .sort((a, b) => ordinalCompare(a.name, b.name))) {
   const skillDir = path.join(SKILLS_DIR, entry.name);
-  const skill = parseSkill(fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8"), entry.name);
+  const parsed = parseCanonicalSkillMarkdown(fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8"));
+  const skill = projectCanonicalSkill(parsed, entry.name);
   const toolName = skill.name.replace(/-/g, "_");
   if (toolNames.has(toolName)) throw new Error(`duplicate MCP tool name: ${toolName}`);
   toolNames.add(toolName);
