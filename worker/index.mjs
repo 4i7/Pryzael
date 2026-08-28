@@ -14,11 +14,11 @@ function createServer() {
       {
         title: skill.title,
         description: skill.description,
-        inputSchema: {
+        inputSchema: z.object({
           resource: z.string().optional().describe(
             "Optional package-local resource path advertised by an earlier call to this same Pryzael workflow tool.",
           ),
-        },
+        }),
         annotations: {
           readOnlyHint: true,
           destructiveHint: false,
@@ -70,10 +70,10 @@ function createServer() {
   return server;
 }
 
-const handleMcp = createMcpHandler(createServer);
+const mcpHandler = createMcpHandler(createServer);
 
 export default {
-  fetch(request, env, ctx) {
+  fetch(request) {
     const url = new URL(request.url);
 
     if (url.pathname === "/health") {
@@ -88,6 +88,6 @@ export default {
       return new Response("Not found", { status: 404 });
     }
 
-    return handleMcp(request, env, ctx);
+    return mcpHandler.fetch(request);
   },
 };
