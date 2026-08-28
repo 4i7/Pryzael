@@ -83,9 +83,15 @@ def validate_skill(path: Path) -> list[str]:
         errors.append("missing LICENSE.pstack.txt package notice")
 
     for match in RESOURCE_RE.findall(text):
-        candidate = path / match.rstrip(".,;:)")
-        if not candidate.exists():
-            errors.append(f"broken local resource reference: {match}")
+        resource = match.rstrip(".,;:)")
+        candidate = path / resource
+        if candidate.exists():
+            continue
+        # Bare directory-like prose such as "scripts/codemods" is ambiguous and
+        # must not be promoted into a file-reference contract. Missing file-like
+        # paths remain actionable validation failures.
+        if Path(resource).suffix:
+            errors.append(f"broken local resource reference: {resource}")
 
     return errors
 
