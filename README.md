@@ -1,8 +1,13 @@
 # Pryzael
 
-Portable engineering skills for ChatGPT and other Agent Skills-compatible clients, adapted from selected `pstack` skills.
+Portable engineering workflows for ChatGPT, Codex, and other Agent Skills/MCP-compatible clients, adapted from selected `pstack` skills.
 
-Pryzael is both a source-of-truth repository and a **skills-only ChatGPT/Codex plugin package**. The repository root is the plugin root, `.codex-plugin/plugin.json` identifies the installable plugin, and each directory under `skills/` remains an independent Agent Skills package whose runtime manifest is its own `SKILL.md`.
+Pryzael keeps each `skills/<name>/SKILL.md` as the canonical workflow source and exposes the same sources through two runtime projections:
+
+- **Agent Skills** for clients that natively load skills;
+- **read-only MCP workflow tools** for clients/surfaces that can call MCP tools.
+
+The MCP layer is an adapter, not a second workflow implementation.
 
 ## Skills
 
@@ -17,10 +22,12 @@ Pryzael is both a source-of-truth repository and a **skills-only ChatGPT/Codex p
 
 ## Plugin shape
 
-Pryzael deliberately uses the OpenAI **Skills only** plugin architecture:
-
 ```text
 .codex-plugin/plugin.json
+.mcp.json
+mcp/
+  server.mjs
+  server.test.mjs
 skills/
   architect/
   blast-radius/
@@ -32,57 +39,53 @@ skills/
   show-me-your-work/
 ```
 
-There is no Pryzael MCP server, `.mcp.json`, `.app.json`, hosted database, external API, or always-on runtime. Skills use tools/connectors already available in the active ChatGPT or Codex session. This avoids adding a metered hosting dependency or another operational authority layer.
+`.codex-plugin/plugin.json` declares both `skills` and `mcpServers`. `.mcp.json` starts a local stdio MCP server with Node.js. The server discovers every Skill at runtime, derives each MCP tool description from that Skill's frontmatter, and returns the Skill body when the tool is called. Package-local `references/`, `assets/`, and text `scripts/` remain on-demand resources exposed through the same workflow tool.
 
-The absence of Pryzael runtime infrastructure does not remove usage limits imposed by ChatGPT plans, models, connectors, or third-party services.
+The MCP server performs no writes, network requests, authentication, database access, or model/API calls. It only reads the installed Pryzael package. A public hosted Pryzael service is not required.
 
-See [`docs/PLUGIN.md`](docs/PLUGIN.md) for the zero-infrastructure packaging, testing, and Web distribution model.
+See [`docs/MCP.md`](docs/MCP.md) for local and ChatGPT connection instructions and [`ARCHITECTURE.md`](ARCHITECTURE.md) for the authority boundaries.
 
 ## Runtime model
 
-Pryzael follows the Agent Skills open format:
+Each skill remains independently valid:
 
 ```text
 skills/<name>/
-  SKILL.md                 required manifest and instructions
-  references/              optional, loaded on demand
-  assets/                  optional templates/resources
-  scripts/                 optional executable helpers
-  LICENSE.pstack.txt       upstream notice for these adaptations
+  SKILL.md
+  references/              optional
+  assets/                  optional
+  scripts/                 optional
+  LICENSE.pstack.txt
 ```
 
-The `name` and `description` in each `SKILL.md` are the discovery surface. Keep them precise. Detailed procedures belong in the body or on-demand references.
+The `name` and `description` in each `SKILL.md` remain the discovery contract. MCP tool metadata is generated from them instead of duplicating trigger text in server code.
 
-Installing the Pryzael plugin groups the eight skills into one installable experience. Individual skills remain self-contained and do not depend on files above their own skill root for runtime correctness.
+When a Skill body references a package-local supporting file, the MCP tool reports the available resource path. Calling that same workflow tool again with `resource` set to the reported path returns the supporting text. This preserves progressive disclosure without requiring the remote model to access the local filesystem directly.
 
-## Architecture
+## ChatGPT Web path
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for:
+For ChatGPT surfaces that can call custom MCP plugins, Pryzael can run locally and be connected through an MCP endpoint. The preferred no-hosting development path is OpenAI's Secure MCP Tunnel: the MCP server and tunnel client run only while Pryzael is in use, and no third-party hosted runtime is required.
 
-- ChatGPT/Agent Skills loading boundaries;
-- soft composition and trigger precedence;
-- GitHub exact-head review semantics;
-- capability detection and read/write boundaries;
-- verification and audit contracts;
-- skills-only plugin packaging and validation rules.
+Do not infer MCP execution merely because a plugin appears installed or is mentioned by the model. Qualification should rely only on user-visible tool execution evidence available on the actual ChatGPT surface.
 
-See [`docs/WEBCHATGPT.md`](docs/WEBCHATGPT.md) for product-facing deployment notes and [`docs/PLUGIN.md`](docs/PLUGIN.md) for the OpenAI plugin path.
+See [`docs/WEBCHATGPT.md`](docs/WEBCHATGPT.md) and [`docs/MCP.md`](docs/MCP.md).
 
 ## Validation
 
-The authoritative format validator is the Agent Skills `skills-ref` validator when available:
+Agent Skills validation:
 
 ```text
 skills-ref validate ./skills/architect
-```
-
-Pryzael also carries a lightweight repository check:
-
-```text
 python scripts/validate_skills.py
 ```
 
-It checks the subset of format and packaging invariants Pryzael relies on. It is not a replacement for the upstream validator or the OpenAI plugin submission scanner.
+MCP protocol/adapter smoke test (Node.js, no npm dependencies):
+
+```text
+node --test mcp/server.test.mjs
+```
+
+The local checks do not replace OpenAI's plugin ingestion/submission validation or live ChatGPT testing.
 
 ## Provenance
 
