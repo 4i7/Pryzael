@@ -26,7 +26,9 @@ Break work into independently checkable units and resolve risky unknowns before 
 
 Use the narrow skills rather than copying their procedures:
 
-- `architect` for consequential boundary/design decisions;
+- `how` for a working model of the current subsystem/runtime path when it is not already understood;
+- `why` when historical, product, or operational rationale may constrain the target shape;
+- `architect` for consequential boundary/design decisions, including comparison of simpler alternative architectures before adoption;
 - `blast-radius` for hidden downstream risk;
 - `sequence-verifiable-units` for staged execution;
 - `fix-root-causes` when a failure or violated invariant must be diagnosed;
