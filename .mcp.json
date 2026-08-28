@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pryzael": {
+      "cwd": ".",
+      "command": "node",
+      "args": [
+        "./mcp/server.mjs"
+      ]
+    }
+  }
+}
