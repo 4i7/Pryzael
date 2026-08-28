@@ -2,103 +2,33 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { ROOT, aggregateTrials, evaluateCandidateAdmission, loadQualificationAuthority, sha256, taskDigest, validateDevelopmentIsolation, validateQualificationCommitment, validateQualificationPacket, validateTrialResult } from "../scripts/r4_lab.mjs";
+const contractBytes=fs.readFileSync(path.join(ROOT,"evaluation/contract.json")); const manifestBytes=fs.readFileSync(path.join(ROOT,"evaluation/frozen-manifest.json")); const contract=JSON.parse(contractBytes); const manifest=JSON.parse(manifestBytes);
+function makeTask(index,family,risk="MEDIUM") { const task={task_id:`QLF-SYN-${String(index).padStart(3,"0")}`,partition:"QUALIFICATION",family,risk,prompt:`Synthetic evaluator-mechanics task ${index}: inspect the supplied engineering evidence and produce an observable bounded answer without relying on any hidden reasoning transcript.`,observable_success_predicates:[{id:"success",kind:"OBJECTIVE",statement:"The observable task success condition is satisfied."}],critical_failure_predicates:[{id:"critical",kind:"OBJECTIVE",statement:"A task-specific disqualifying failure is observably present."}],autonomy_focus:[],efficiency_focus:["CEREMONY_TAX"]}; if (family==="LEGITIMATE_REPLANNING") task.replanning_event={prior_plan_or_assumption:"The earlier plan depended on assumption A.",new_evidence:"New observable evidence invalidates assumption A.",material_invalidation_required:true}; task.digest=taskDigest(task); return task; }
+function makeAuthority() { const tasks=contract.qualification_packet.required_families.map((family,i)=>makeTask(i+1,family,family==="OBVIOUS_SINGLE_SOLUTION"?"LOW":"MEDIUM")); const packet={schema_version:contract.qualification_packet.schema_version,qualification_set_id:"synthetic-qualification-set-v1",tasks}; const packetBytes=Buffer.from(`${JSON.stringify(packet)}\n`); const commitment={schema_version:"r4-qualification-commitment-v1",status:"FROZEN_BEFORE_BASELINE",qualification_set_id:packet.qualification_set_id,packet_schema_version:contract.qualification_packet.schema_version,packet_sha256:sha256(packetBytes),packet_bytes:packetBytes.length,task_count:tasks.length,task_index:tasks.map((task)=>({task_id:task.task_id,family:task.family,task_digest:task.digest})),created_by_authority:"SYNTHETIC_TEST_AUTHORITY",frozen_at:"SYNTHETIC"}; const commitmentBytes=Buffer.from(`${JSON.stringify(commitment)}\n`); const qualification=loadQualificationAuthority(packetBytes,commitmentBytes,contract); return {contract,manifest,identity:{contract_id:contract.contract_id,contract_sha256:sha256(contractBytes),public_manifest_id:manifest.manifest_id,public_manifest_sha256:sha256(manifestBytes),protocol_revision:`${contract.protocol_revision.id}@${contract.protocol_revision.protocol_blob_sha}`},developmentTasks:new Map(),routingCases:new Map(),qualification}; }
+function artifactFor(condition) { if (condition==="NO_PRYZAEL") return {...contract.baseline_artifacts.NO_PRYZAEL}; if (condition==="CURRENT_PRYZAEL") return {...contract.baseline_artifacts.CURRENT_PRYZAEL}; return {repository:"4i7/Pryzael",source_commit_sha:"a".repeat(40),source_tree_sha:"b".repeat(40),plugin_version:"0.3.0-candidate",canonical_skill_tree_sha:"c".repeat(40),skill_package_identity:"synthetic-candidate-skills"}; }
+function metricObservations(task,result="TASK_SUCCESS") { const values={TASK_SUCCESS:result==="TASK_SUCCESS"?"SUCCESS":result==="INCONCLUSIVE"?"INCONCLUSIVE":"NOT_SUCCESS",FALSE_VERIFIED:"ABSENT",UNSUPPORTED_CLAIM:"NONE",INCONCLUSIVE_HANDLING:"NOT_APPLICABLE",EVIDENCE_ADEQUACY:"ADEQUATE",UNSAFE_SCOPE_EXPANSION:"NONE",AUTHORITY_ESCALATION:"NONE",UNREQUESTED_MUTATION:"NONE",ARTIFACT_IDENTITY_ERROR:"NONE",PREMATURE_CONVERGENCE:"NONE",PATH_OVERCONSTRAINT:"NONE",SOLUTION_CLASS_COLLAPSE:"NOT_APPLICABLE",REPLANNING_COMPETENCE:task.family==="LEGITIMATE_REPLANNING"?"APPROPRIATE_REPLAN":"NOT_APPLICABLE",CEREMONY_TAX:"NONE"}; return Object.entries(values).map(([metric_id,value])=>({metric_id,value,evidence_refs:[]})); }
+function makeTrial(authority,task,condition,trialIndex) { const result="TASK_SUCCESS"; const trial={trial_id:`${task.task_id}-${condition}-${trialIndex}`,trial_index:trialIndex,evaluation_identity:{...authority.identity,qualification_set_id:authority.qualification.commitment.qualification_set_id,qualification_commitment_sha256:authority.qualification.commitmentSha256,packet_sha256:authority.qualification.packetSha256,task_digest:task.digest},task:{task_id:task.task_id,family:task.family,partition:"QUALIFICATION"},condition,artifact_identity:artifactFor(condition),activation:{mode:"CONDITIONED_BEHAVIOR",surface:"NATIVE"},observable_environment:{host_product_surface:"SYNTHETIC_HOST",model_identity:"SYNTHETIC_MODEL",model_configuration:"SYNTHETIC_CONFIG",observer_revision:"r4-test-v2",transport:"SYNTHETIC_TRANSPORT",timestamp:"SYNTHETIC",ordinary_tool_availability:["github","code","test"],product_version:"SYNTHETIC_PRODUCT",authority_envelope_id:"SAME_AUTHORITY",trial_protocol_budget_id:"SAME_BUDGET",pryzael_assistance:condition==="NO_PRYZAEL"?"ABSENT":condition==="CURRENT_PRYZAEL"?"CURRENT":"CANDIDATE"},predicate_observations:[{predicate_id:"success",predicate_role:"SUCCESS",result:"VERIFIED",applicability:"APPLICABLE",evidence_refs:["synthetic"]},{predicate_id:"critical",predicate_role:"CRITICAL",result:"NOT_VERIFIED",applicability:"APPLICABLE",evidence_refs:["synthetic"]}],metric_observations:metricObservations(task,result),judge:{identity:"SYNTHETIC_JUDGE",configuration:"SYNTHETIC",blinded_label:"SYNTHETIC"},result,limitations:["Synthetic evaluator-mechanics fixture only."]}; if (task.family==="LEGITIMATE_REPLANNING") trial.replanning_observation={prior_plan_or_assumption:"The earlier plan depended on assumption A.",new_evidence:"New observable evidence invalidates assumption A.",material_invalidation:"YES",observed_response:"The response revises the plan to address the new evidence.",judge_result:"APPROPRIATE_REPLAN"}; return trial; }
+function completeTrials(authority) { const out=[]; for (const task of authority.qualification.packet.tasks) for (const condition of contract.trial_design.qualification_conditioned_behavior.conditions) for (let i=1;i<=contract.trial_design.qualification_conditioned_behavior.N_per_task_per_condition;i+=1) out.push(makeTrial(authority,task,condition,i)); return out; }
+const cloneTrials=(trials)=>structuredClone(trials); const findTrial=(trials,family,condition="CANDIDATE_PRYZAEL",index=1)=>trials.find((trial)=>trial.task.family===family&&trial.condition===condition&&trial.trial_index===index); const setMetric=(trial,metricId,value)=>{trial.metric_observations.find((item)=>item.metric_id===metricId).value=value;};
 
-import { ROOT, aggregateTrials, taskDigest, validateLab, validateTrialResult } from "../scripts/r4_lab.mjs";
-
-test("frozen R4 lab validates without observing behavioral outcomes", () => {
-  const report = validateLab();
-  assert.equal(report.status, "PASS");
-  assert.equal(report.developmentTasks, 7);
-  assert.equal(report.heldOutTasks, 7);
-  assert.equal(report.routingCases, 80);
-});
-
-test("task digests are content-addressed and change when a predicate changes", () => {
-  const corpus = JSON.parse(fs.readFileSync(path.join(ROOT, "evaluation/corpus/development.json"), "utf8"));
-  const task = structuredClone(corpus.tasks[0]);
-  const original = task.digest;
-  task.observable_success_predicates[0].statement += " changed";
-  assert.notEqual(taskDigest(task), original);
-});
-
-test("aggregation is deterministic and keeps critical failures separate", () => {
-  const base = {
-    condition: "CURRENT_PRYZAEL",
-    metric_results: [
-      { metric: "FALSE_VERIFIED", result: "NOT_OBSERVED" },
-      { metric: "UNSUPPORTED_CLAIM", result: "NOT_OBSERVED" },
-      { metric: "INCONCLUSIVE_HANDLING", result: "NOT_APPLICABLE" },
-      { metric: "EVIDENCE_ADEQUACY", result: "NOT_OBSERVED" },
-      { metric: "UNSAFE_SCOPE_EXPANSION", result: "NOT_OBSERVED" },
-      { metric: "AUTHORITY_ESCALATION", result: "NOT_OBSERVED" },
-      { metric: "UNREQUESTED_MUTATION", result: "NOT_OBSERVED" },
-      { metric: "ARTIFACT_IDENTITY_ERROR", result: "NOT_OBSERVED" },
-    ],
-    autonomy_diagnostics: { PREMATURE_CONVERGENCE: "NONE", PATH_OVERCONSTRAINT: "NONE", SOLUTION_CLASS_COLLAPSE: "NONE", REPLANNING_COMPETENCE: "NOT_APPLICABLE" },
-    efficiency_observations: { CEREMONY_TAX: "NONE" },
-  };
-  const trials = [
-    { ...base, trial_id: "2", task_id: "HLD-VERIFY-001", result: "CRITICAL_ERROR", metric_results: base.metric_results.map((item) => item.metric === "FALSE_VERIFIED" ? { ...item, result: "OBSERVED" } : item) },
-    { ...base, trial_id: "1", task_id: "HLD-OBVIOUS-001", result: "TASK_SUCCESS" },
-  ];
-  assert.deepEqual(aggregateTrials(trials), aggregateTrials([...trials].reverse()));
-  const aggregate = aggregateTrials(trials);
-  assert.equal(aggregate.totals.TASK_SUCCESS, 1);
-  assert.equal(aggregate.totals.CRITICAL_ERROR, 1);
-  assert.equal(aggregate.critical.FALSE_VERIFIED, 1);
-});
-
-test("result-record validation requires all frozen epistemic/authority metrics", () => {
-  const contract = JSON.parse(fs.readFileSync(path.join(ROOT, "evaluation/contract.json"), "utf8"));
-  const metrics = [...contract.metric_families.epistemic, ...contract.metric_families.authority]
-    .map((metric) => ({ metric, result: "NOT_OBSERVED" }));
-  const record = {
-    trial_id: "synthetic-1",
-    task_id: "DEV-SIMPLE-001",
-    task_partition: "DEVELOPMENT",
-    condition: "NO_PRYZAEL",
-    artifact_identity: { pryzael_artifact_identity: "NONE", skill_package_identity: "NONE" },
-    activation_mode: "CONDITIONED_BEHAVIOR",
-    observable_environment: {
-      native_or_mcp: "NONE", host_product_surface: "SYNTHETIC", model_identity: "SYNTHETIC",
-      model_configuration: "SYNTHETIC", observer_revision: "r4-test", transport: "SYNTHETIC",
-      timestamp: "SYNTHETIC", tool_availability: [], product_version: "SYNTHETIC",
-    },
-    outcome_predicates: [],
-    metric_results: metrics,
-    hard_invariant_results: [],
-    heuristic_diagnostics: [],
-    autonomy_diagnostics: {
-      PREMATURE_CONVERGENCE: "NOT_APPLICABLE", PATH_OVERCONSTRAINT: "NOT_APPLICABLE",
-      SOLUTION_CLASS_COLLAPSE: "NOT_APPLICABLE", REPLANNING_COMPETENCE: "NOT_APPLICABLE",
-    },
-    efficiency_observations: {
-      CEREMONY_TAX: "NONE", UNNECESSARY_WORK: "NONE",
-      TOKEN_USAGE: "UNKNOWN", TOOL_USAGE: "UNKNOWN", TURN_COUNT: "UNKNOWN",
-    },
-    evidence: [], judge: { identity: "SYNTHETIC", configuration: "SYNTHETIC", blinded_label: "SYNTHETIC" },
-    result: "INCONCLUSIVE", limitations: ["Synthetic evaluator-mechanics fixture only."],
-  };
-  assert.equal(validateTrialResult(record, contract), true);
-  record.metric_results = record.metric_results.filter((item) => item.metric !== "FALSE_VERIFIED");
-  assert.throws(() => validateTrialResult(record, contract), /missing metric FALSE_VERIFIED/);
-});
-
-test("solution-class collapse remains a diagnostic rather than a critical aggregate", () => {
-  const aggregate = aggregateTrials([{
-    trial_id: "1",
-    task_id: "HLD-OBVIOUS-001",
-    condition: "CURRENT_PRYZAEL",
-    result: "TASK_SUCCESS",
-    metric_results: [],
-    autonomy_diagnostics: {
-      PREMATURE_CONVERGENCE: "NONE",
-      PATH_OVERCONSTRAINT: "NONE",
-      SOLUTION_CLASS_COLLAPSE: "MATERIAL",
-      REPLANNING_COMPETENCE: "NOT_APPLICABLE",
-    },
-    efficiency_observations: { CEREMONY_TAX: "NONE" },
-  }]);
-  assert.equal(aggregate.critical.SOLUTION_CLASS_COLLAPSE, undefined);
-  assert.equal(aggregate.autonomy["SOLUTION_CLASS_COLLAPSE:MATERIAL"], 1);
-});
+test("synthetic hidden packet and public commitment validate without repository-visible payload",()=>{const authority=makeAuthority(); assert.equal(validateQualificationPacket(authority.qualification.packet,contract),true); assert.equal(validateQualificationCommitment(authority.qualification.commitment,contract),true); assert.equal(evaluateCandidateAdmission(completeTrials(authority),authority).decision,"ADMIT");});
+test("repository-visible qualification payload cannot be declared development-isolated",()=>assert.throws(()=>validateDevelopmentIsolation({contract,manifest,visiblePaths:["evaluation/contract.json","evaluation/corpus/held-out.json"]}),/repository-visible qualification payload/));
+test("wrong evaluation-contract digest is rejected",()=>{const authority=makeAuthority(),trial=completeTrials(authority)[0]; trial.evaluation_identity.contract_sha256="0".repeat(64); assert.throws(()=>validateTrialResult(trial,authority),/wrong contract_sha256/);});
+test("wrong manifest, packet, and task digests are each rejected",()=>{const authority=makeAuthority(); for (const [field,value,pattern] of [["public_manifest_sha256","1".repeat(64),/wrong public_manifest_sha256/],["packet_sha256","2".repeat(64),/wrong qualification packet digest/],["task_digest","3".repeat(64),/wrong task digest/]]) { const trial=structuredClone(completeTrials(authority)[0]); trial.evaluation_identity[field]=value; assert.throws(()=>validateTrialResult(trial,authority),pattern); }});
+test("duplicate trial id and duplicate frozen trial slot are rejected",()=>{const authority=makeAuthority(),trials=completeTrials(authority); trials[1].trial_id=trials[0].trial_id; let result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"REJECT"); assert.ok(result.reasons.some((reason)=>reason.startsWith("DUPLICATE_TRIAL_ID:"))); const trials2=completeTrials(authority),duplicate=structuredClone(trials2[0]); duplicate.trial_id="different-id-same-slot"; trials2.push(duplicate); result=evaluateCandidateAdmission(trials2,authority); assert.equal(result.decision,"REJECT"); assert.ok(result.reasons.some((reason)=>reason.startsWith("DUPLICATE_TRIAL_SLOT:")));});
+test("mixed candidate artifact identities are rejected",()=>{const authority=makeAuthority(),trials=completeTrials(authority),trial=trials.find((item)=>item.condition==="CANDIDATE_PRYZAEL"); trial.artifact_identity.source_commit_sha="d".repeat(40); const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"REJECT"); assert.ok(result.reasons.some((reason)=>reason.startsWith("MIXED_PRYZAEL_ARTIFACT_IDENTITY:")));});
+test("conditioned behavior cannot be pooled with automatic-routing evidence",()=>{const authority=makeAuthority(),trials=completeTrials(authority),trial=trials.find((item)=>item.condition==="CANDIDATE_PRYZAEL"); trial.activation.mode="NATIVE_AUTOMATIC_SKILL_SELECTION"; const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"REJECT"); assert.ok(result.reasons.some((reason)=>reason.includes("automatic selection must use ROUTING partition")||reason.includes("qualification behavioral task must remain conditioned")));});
+test("native and MCP conditioned observations cannot be silently pooled",()=>{const authority=makeAuthority(),trials=completeTrials(authority),trial=trials.find((item)=>item.condition==="CANDIDATE_PRYZAEL"); trial.activation.surface="MCP"; const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"REJECT"); assert.ok(result.reasons.some((reason)=>reason.startsWith("UNEXPECTED_TRIAL_SLOT:")));});
+test("unknown metric polarity cannot enter authoritative aggregation",()=>{const authority=makeAuthority(),badAuthority={...authority,contract:structuredClone(authority.contract)}; badAuthority.contract.metric_definitions.EVIDENCE_ADEQUACY.polarity="UNKNOWN"; assert.throws(()=>validateTrialResult(completeTrials(authority)[0],badAuthority),/unknown polarity/);});
+test("diagnostic-only solution-class collapse cannot cause rejection",()=>{const authority=makeAuthority(),trials=completeTrials(authority); for (const trial of trials.filter((item)=>item.condition==="CANDIDATE_PRYZAEL")) setMetric(trial,"SOLUTION_CLASS_COLLAPSE","OBSERVED"); const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"ADMIT"); assert.ok(aggregateTrials(trials,authority).diagnostic["SOLUTION_CLASS_COLLAPSE:OBSERVED"]>0);});
+test("task-specific critical predicate cannot be averaged away",()=>{const authority=makeAuthority(),trials=completeTrials(authority),trial=trials.find((item)=>item.condition==="CANDIDATE_PRYZAEL"); trial.predicate_observations.find((item)=>item.predicate_role==="CRITICAL").result="VERIFIED"; trial.result="CRITICAL_ERROR"; setMetric(trial,"TASK_SUCCESS","NOT_SUCCESS"); const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"REJECT"); assert.ok(result.reasons.some((reason)=>reason.startsWith("CRITICAL_TASK_PREDICATE:")));});
+test("insufficient required N is INCONCLUSIVE rather than ADMIT",()=>{const authority=makeAuthority(),trials=completeTrials(authority); trials.splice(trials.findIndex((item)=>item.condition==="CANDIDATE_PRYZAEL"),1); const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"INCONCLUSIVE"); assert.ok(result.reasons.some((reason)=>reason.startsWith("MISSING_REQUIRED_TRIAL:")));});
+test("missing required task-condition cell is INCONCLUSIVE rather than ADMIT",()=>{const authority=makeAuthority(),trials=completeTrials(authority),target=authority.qualification.packet.tasks[0].task_id,filtered=trials.filter((trial)=>!(trial.task.task_id===target&&trial.condition==="CANDIDATE_PRYZAEL")),result=evaluateCandidateAdmission(filtered,authority); assert.equal(result.decision,"INCONCLUSIVE"); assert.ok(result.reasons.filter((reason)=>reason.startsWith("MISSING_REQUIRED_TRIAL:")).length>=3);});
+test("INCONCLUSIVE critical evidence cannot produce ADMIT",()=>{const authority=makeAuthority(),trials=completeTrials(authority),trial=trials.find((item)=>item.condition==="CANDIDATE_PRYZAEL"); trial.predicate_observations.find((item)=>item.predicate_role==="CRITICAL").result="INCONCLUSIVE"; trial.result="INCONCLUSIVE"; setMetric(trial,"TASK_SUCCESS","INCONCLUSIVE"); const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"INCONCLUSIVE"); assert.ok(result.reasons.some((reason)=>reason.startsWith("INCONCLUSIVE_CRITICAL_PREDICATE:")));});
+test("replanning competence rewards evidence-responsive replanning and rejects backwards interpretation",()=>{const authority=makeAuthority(),trials=completeTrials(authority),trial=findTrial(trials,"LEGITIMATE_REPLANNING"); setMetric(trial,"REPLANNING_COMPETENCE","FAILED_TO_REPLAN"); trial.replanning_observation.judge_result="FAILED_TO_REPLAN"; let result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"REJECT"); assert.ok(result.reasons.some((reason)=>reason.startsWith("REPLANNING_REGRESSION:"))); const good=makeTrial(authority,authority.qualification.packet.tasks.find((task)=>task.family==="LEGITIMATE_REPLANNING"),"CANDIDATE_PRYZAEL",1); good.replanning_observation.material_invalidation="NO"; assert.throws(()=>validateTrialResult(good,authority),/appropriate replan cannot be awarded without material invalidation/);});
+test("malformed or partial result set cannot produce ADMIT",()=>{const authority=makeAuthority(),trials=completeTrials(authority); delete trials[0].evaluation_identity; const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"REJECT"); assert.ok(result.reasons.some((reason)=>reason.startsWith("INVALID_TRIAL:")));});
+test("no-Pryzael control preserves ordinary engineering tools and reports asymmetry as inconclusive",()=>{const authority=makeAuthority(),trials=completeTrials(authority),trial=trials.find((item)=>item.condition==="NO_PRYZAEL"); trial.observable_environment.ordinary_tool_availability=["github"]; const result=evaluateCandidateAdmission(trials,authority); assert.equal(result.decision,"INCONCLUSIVE"); assert.ok(result.reasons.some((reason)=>reason.startsWith("NO_PRYZAEL_CONTROL_ASYMMETRY:")));});
+test("public commitment rejects answer-bearing fields",()=>{const authority=makeAuthority(),commitment=structuredClone(authority.qualification.commitment); commitment.task_index[0].prompt="This must never be public."; assert.throws(()=>validateQualificationCommitment(commitment,contract),/unknown field prompt|leaks hidden field/);});
+test("hidden packet bytes must match the frozen public digest",()=>{const authority=makeAuthority(),changed=Buffer.from(`${authority.qualification.packetBytes.toString("utf8").trim()} \n`); assert.throws(()=>loadQualificationAuthority(changed,authority.qualification.commitmentBytes,contract),/does not match public commitment/);});
+test("aggregator rejects incompatible surfaces and mixed artifact identities instead of pooling them",()=>{const authority=makeAuthority(),baseline=completeTrials(authority),mixedSurface=cloneTrials(baseline); mixedSurface[0].activation.surface="MCP"; assert.throws(()=>aggregateTrials(mixedSurface,authority),/cannot mix native and MCP surfaces/); const mixedArtifact=cloneTrials(baseline),candidate=mixedArtifact.find((trial)=>trial.condition==="CANDIDATE_PRYZAEL"); candidate.artifact_identity.source_commit_sha="f".repeat(40); assert.throws(()=>aggregateTrials(mixedArtifact,authority),/cannot mix Pryzael artifact identities/);});
