@@ -1,20 +1,266 @@
+import { validateContract } from "./r4_lab_core.mjs";
 import { buildEvaluationAuthority } from "./r4_lab_qualification.mjs";
 import { validateTrialResult } from "./r4_lab_trial.mjs";
-import { addReason, artifactSetKey, checkArtifactConsistency, checkAuthoritativeInconclusive, checkCompleteMatrix, checkControlComparability, criticalPredicateStatus, qualificationRegressions } from "./r4_lab_admission_rules.mjs";
+import {
+  addReason,
+  artifactSetKey,
+  checkArtifactConsistency,
+  checkAuthoritativeInconclusive,
+  checkCompleteMatrix,
+  checkControlComparability,
+  criticalPredicateStatus,
+  executeMetricAdmissionPolicies,
+} from "./r4_lab_admission_rules.mjs";
 
-function validateTrialCollection(trials,authority,rejectReasons) { const ids=new Set(); for (const trial of trials) { if (ids.has(trial.trial_id)) addReason(rejectReasons,"DUPLICATE_TRIAL_ID",trial.trial_id); ids.add(trial.trial_id); try { validateTrialResult(trial,authority); } catch(error) { addReason(rejectReasons,"INVALID_TRIAL",`${trial.trial_id ?? "UNKNOWN"}:${error.message}`); } } }
-export function evaluateCandidateAdmission(trials,authority=null,{routingChanged=false,routingTrials=null}={}) {
-  if (!Array.isArray(trials)) return {decision:"INCONCLUSIVE",reasons:["MALFORMED_INPUT: trials must be an array"]}; if (!authority?.qualification) return {decision:"INCONCLUSIVE",reasons:["HIDDEN_QUALIFICATION_AUTHORITY_REQUIRED"]}; const rejectReasons=[], inconclusiveReasons=[]; validateTrialCollection(trials,authority,rejectReasons); if (rejectReasons.some((reason)=>reason.startsWith("INVALID_TRIAL:"))) return {decision:"REJECT",reasons:[...new Set(rejectReasons)]};
-  const qualificationOnly=trials.filter((item)=>item.task?.partition==="QUALIFICATION"); if (qualificationOnly.length!==trials.length) addReason(rejectReasons,"PARTITION_MIXING","candidate admission accepts QUALIFICATION records only"); const design=authority.contract.trial_design.qualification_conditioned_behavior, tasks=[...authority.qualification.tasks.values()]; checkCompleteMatrix(trials,tasks,design,rejectReasons,inconclusiveReasons); checkControlComparability(trials,tasks,design,inconclusiveReasons); checkArtifactConsistency(trials,rejectReasons); const candidate=trials.filter((item)=>item.condition==="CANDIDATE_PRYZAEL"); criticalPredicateStatus(candidate,rejectReasons,inconclusiveReasons); checkAuthoritativeInconclusive(candidate,authority.contract,inconclusiveReasons); if (!inconclusiveReasons.some((reason)=>reason.startsWith("MISSING_REQUIRED_TRIAL:"))) qualificationRegressions(trials,authority,rejectReasons);
-  if (routingChanged) { if (!routingTrials?.native||!routingTrials?.mcp) addReason(inconclusiveReasons,"ROUTING_QUALIFICATION_REQUIRED","native and MCP automatic evidence are both required for routing/discovery changes"); else { const native=evaluateRoutingAdmission(routingTrials.native,authority,"NATIVE_AUTOMATIC_SKILL_SELECTION"), mcp=evaluateRoutingAdmission(routingTrials.mcp,authority,"MCP_AUTOMATIC_TOOL_SELECTION"); if (native.decision!=="ADMIT") addReason(inconclusiveReasons,"NATIVE_ROUTING_NOT_ADMITTED",native.reasons.join(";")); if (mcp.decision!=="ADMIT") addReason(inconclusiveReasons,"MCP_ROUTING_NOT_ADMITTED",mcp.reasons.join(";")); } }
-  if (rejectReasons.length) return {decision:"REJECT",reasons:[...new Set(rejectReasons)]}; if (inconclusiveReasons.length) return {decision:"INCONCLUSIVE",reasons:[...new Set(inconclusiveReasons)]}; return {decision:"ADMIT",reasons:[]};
+function validateTrialCollection(trials, authority, rejectReasons) {
+  const ids = new Set();
+  for (const trial of trials) {
+    if (ids.has(trial.trial_id)) addReason(rejectReasons, "DUPLICATE_TRIAL_ID", trial.trial_id);
+    ids.add(trial.trial_id);
+    try {
+      validateTrialResult(trial, authority);
+    } catch (error) {
+      addReason(
+        rejectReasons,
+        "INVALID_TRIAL",
+        `${trial.trial_id ?? "UNKNOWN"}:${error.message}`,
+      );
+    }
+  }
 }
-function expectedRoutingCases(authority,mode) { const all=[...authority.routingCases.values()]; if (mode==="NATIVE_AUTOMATIC_SKILL_SELECTION") return all.filter((item)=>item.case_type==="FRESH_CHAT_AUTOMATIC"); if (mode==="MCP_AUTOMATIC_TOOL_SELECTION") return all.filter((item)=>item.case_type==="CLEAR_POSITIVE"); throw new Error(`unsupported routing admission mode: ${mode}`); }
-export function evaluateRoutingAdmission(trials,authority=buildEvaluationAuthority(),mode) {
-  const rejectReasons=[], inconclusiveReasons=[]; if (!Array.isArray(trials)) return {decision:"INCONCLUSIVE",reasons:["MALFORMED_ROUTING_INPUT"]}; const design=mode==="NATIVE_AUTOMATIC_SKILL_SELECTION"?authority.contract.trial_design.native_automatic_skill_selection:authority.contract.trial_design.mcp_automatic_tool_selection; if (!design||design.activation_mode!==mode) return {decision:"REJECT",reasons:["ROUTING_MODE_NOT_FROZEN"]}; validateTrialCollection(trials,authority,rejectReasons); const cases=expectedRoutingCases(authority,mode), expected=new Set(); for (const item of cases) for (const condition of design.conditions) for (let index=1;index<=design.N_per_case_per_condition;index+=1) expected.add(`${item.case_id}\0${condition}\0${index}\0${mode}\0${design.surface}`); const seen=new Set(); for (const trial of trials) { const key=`${trial.task.task_id}\0${trial.condition}\0${trial.trial_index}\0${trial.activation.mode}\0${trial.activation.surface}`; if (seen.has(key)) addReason(rejectReasons,"DUPLICATE_ROUTING_SLOT",key.replaceAll("\0","/")); seen.add(key); if (!expected.has(key)) addReason(rejectReasons,"ROUTING_SURFACE_OR_MODE_MIXING",key.replaceAll("\0","/")); if (trial.task.partition!=="ROUTING") addReason(rejectReasons,"ROUTING_PARTITION_MIXING",trial.trial_id); } for (const key of expected) if (!seen.has(key)) addReason(inconclusiveReasons,"MISSING_ROUTING_TRIAL",key.replaceAll("\0","/")); if (trials.some((trial)=>trial.result==="INCONCLUSIVE")) addReason(inconclusiveReasons,"INCONCLUSIVE_ROUTING_TRIAL"); if (rejectReasons.length) return {decision:"REJECT",reasons:[...new Set(rejectReasons)]}; if (inconclusiveReasons.length) return {decision:"INCONCLUSIVE",reasons:[...new Set(inconclusiveReasons)]}; return {decision:"ADMIT",reasons:[]};
+
+export function evaluateCandidateAdmission(
+  trials,
+  authority = null,
+  {routingChanged = false, routingTrials = null} = {},
+) {
+  if (!Array.isArray(trials)) {
+    return {decision: "INCONCLUSIVE", reasons: ["MALFORMED_INPUT: trials must be an array"]};
+  }
+  if (!authority?.qualification) {
+    return {decision: "INCONCLUSIVE", reasons: ["HIDDEN_QUALIFICATION_AUTHORITY_REQUIRED"]};
+  }
+  try {
+    validateContract(authority.contract);
+  } catch (error) {
+    return {
+      decision: "REJECT",
+      reasons: [`INVALID_ADMISSION_AUTHORITY: ${error.message}`],
+    };
+  }
+
+  const rejectReasons = [];
+  const inconclusiveReasons = [];
+  validateTrialCollection(trials, authority, rejectReasons);
+  if (rejectReasons.some((reason) => reason.startsWith("INVALID_TRIAL:"))) {
+    return {decision: "REJECT", reasons: [...new Set(rejectReasons)]};
+  }
+
+  const qualificationOnly = trials.filter((item) => item.task?.partition === "QUALIFICATION");
+  if (qualificationOnly.length !== trials.length) {
+    addReason(
+      rejectReasons,
+      "PARTITION_MIXING",
+      "candidate admission accepts QUALIFICATION records only",
+    );
+  }
+
+  const design = authority.contract.trial_design.qualification_conditioned_behavior;
+  const tasks = [...authority.qualification.tasks.values()];
+  checkCompleteMatrix(trials, tasks, design, rejectReasons, inconclusiveReasons);
+  checkControlComparability(trials, tasks, design, inconclusiveReasons);
+  checkArtifactConsistency(trials, rejectReasons);
+
+  const candidate = trials.filter((item) => item.condition === "CANDIDATE_PRYZAEL");
+  criticalPredicateStatus(candidate, rejectReasons, inconclusiveReasons);
+  checkAuthoritativeInconclusive(candidate, authority.contract, inconclusiveReasons);
+
+  if (!inconclusiveReasons.some((reason) => reason.startsWith("MISSING_REQUIRED_TRIAL:"))) {
+    executeMetricAdmissionPolicies(trials, authority, rejectReasons);
+  }
+
+  if (routingChanged) {
+    if (!routingTrials?.native || !routingTrials?.mcp) {
+      addReason(
+        inconclusiveReasons,
+        "ROUTING_QUALIFICATION_REQUIRED",
+        "native and MCP automatic evidence are both required for routing/discovery changes",
+      );
+    } else {
+      const native = evaluateRoutingAdmission(
+        routingTrials.native,
+        authority,
+        "NATIVE_AUTOMATIC_SKILL_SELECTION",
+      );
+      const mcp = evaluateRoutingAdmission(
+        routingTrials.mcp,
+        authority,
+        "MCP_AUTOMATIC_TOOL_SELECTION",
+      );
+      if (native.decision !== "ADMIT") {
+        addReason(
+          inconclusiveReasons,
+          "NATIVE_ROUTING_NOT_ADMITTED",
+          native.reasons.join(";"),
+        );
+      }
+      if (mcp.decision !== "ADMIT") {
+        addReason(
+          inconclusiveReasons,
+          "MCP_ROUTING_NOT_ADMITTED",
+          mcp.reasons.join(";"),
+        );
+      }
+    }
+  }
+
+  if (rejectReasons.length) {
+    return {decision: "REJECT", reasons: [...new Set(rejectReasons)]};
+  }
+  if (inconclusiveReasons.length) {
+    return {decision: "INCONCLUSIVE", reasons: [...new Set(inconclusiveReasons)]};
+  }
+  return {decision: "ADMIT", reasons: []};
 }
-export function aggregateTrials(trials,authority=buildEvaluationAuthority()) {
-  if (!Array.isArray(trials)) throw new Error("aggregate input must be an array"); const trialIds=new Set(), slots=new Set(), partitions=new Set(), modes=new Set(), surfaces=new Set(), artifactsByCondition=new Map(); for (const trial of trials) { validateTrialResult(trial,authority); if (trialIds.has(trial.trial_id)) throw new Error(`duplicate trial id: ${trial.trial_id}`); trialIds.add(trial.trial_id); const slot=`${trial.task.task_id}\0${trial.condition}\0${trial.trial_index}\0${trial.activation.mode}\0${trial.activation.surface}`; if (slots.has(slot)) throw new Error(`duplicate frozen trial slot: ${slot.replaceAll("\0","/")}`); slots.add(slot); partitions.add(trial.task.partition); modes.add(trial.activation.mode); surfaces.add(trial.activation.surface); const key=artifactSetKey(trial), known=artifactsByCondition.get(trial.condition) ?? new Set(); known.add(key); artifactsByCondition.set(trial.condition,known); }
-  if (partitions.size>1) throw new Error("aggregate cannot mix development/qualification/routing/calibration partitions"); if (modes.size>1) throw new Error("aggregate cannot mix conditioned and automatic/calibration activation modes"); if (surfaces.size>1) throw new Error("aggregate cannot mix native and MCP surfaces"); for (const [condition,keys] of artifactsByCondition) if (keys.size>1) throw new Error(`aggregate cannot mix Pryzael artifact identities within ${condition}`);
-  const contract=authority.contract, sorted=[...trials].sort((a,b)=>[a.task.task_id,a.condition,String(a.trial_index),a.trial_id].join("\0").localeCompare([b.task.task_id,b.condition,String(b.trial_index),b.trial_id].join("\0"),"en")), out={totals:{},byTask:{},metrics:{},criticalPredicates:{},diagnostic:{}}; for (const trial of sorted) { out.totals[trial.result]=(out.totals[trial.result] ?? 0)+1; out.byTask[trial.task.task_id] ??={}; out.byTask[trial.task.task_id][trial.result]=(out.byTask[trial.task.task_id][trial.result] ?? 0)+1; for (const observation of trial.metric_observations ?? []) { const key=`${observation.metric_id}:${observation.value}`, role=contract.metric_definitions[observation.metric_id]?.admission_role, target=role==="DIAGNOSTIC"?out.diagnostic:out.metrics; target[key]=(target[key] ?? 0)+1; } for (const observation of trial.predicate_observations ?? []) if (observation.predicate_role==="CRITICAL"&&observation.result!=="NOT_VERIFIED") { const key=`${observation.predicate_id}:${observation.result}`; out.criticalPredicates[key]=(out.criticalPredicates[key] ?? 0)+1; } } return out;
+
+function expectedRoutingCases(authority, mode) {
+  const all = [...authority.routingCases.values()];
+  if (mode === "NATIVE_AUTOMATIC_SKILL_SELECTION") {
+    return all.filter((item) => item.case_type === "FRESH_CHAT_AUTOMATIC");
+  }
+  if (mode === "MCP_AUTOMATIC_TOOL_SELECTION") {
+    return all.filter((item) => item.case_type === "CLEAR_POSITIVE");
+  }
+  throw new Error(`unsupported routing admission mode: ${mode}`);
+}
+
+export function evaluateRoutingAdmission(
+  trials,
+  authority = buildEvaluationAuthority(),
+  mode,
+) {
+  const rejectReasons = [];
+  const inconclusiveReasons = [];
+  if (!Array.isArray(trials)) {
+    return {decision: "INCONCLUSIVE", reasons: ["MALFORMED_ROUTING_INPUT"]};
+  }
+  const design = mode === "NATIVE_AUTOMATIC_SKILL_SELECTION" ?
+    authority.contract.trial_design.native_automatic_skill_selection :
+    authority.contract.trial_design.mcp_automatic_tool_selection;
+  if (!design || design.activation_mode !== mode) {
+    return {decision: "REJECT", reasons: ["ROUTING_MODE_NOT_FROZEN"]};
+  }
+  validateTrialCollection(trials, authority, rejectReasons);
+  const cases = expectedRoutingCases(authority, mode);
+  const expected = new Set();
+  for (const item of cases) {
+    for (const condition of design.conditions) {
+      for (let index = 1; index <= design.N_per_case_per_condition; index += 1) {
+        expected.add(`${item.case_id}\0${condition}\0${index}\0${mode}\0${design.surface}`);
+      }
+    }
+  }
+  const seen = new Set();
+  for (const trial of trials) {
+    const key = `${trial.task.task_id}\0${trial.condition}\0${trial.trial_index}\0${trial.activation.mode}\0${trial.activation.surface}`;
+    if (seen.has(key)) {
+      addReason(rejectReasons, "DUPLICATE_ROUTING_SLOT", key.replaceAll("\0", "/"));
+    }
+    seen.add(key);
+    if (!expected.has(key)) {
+      addReason(rejectReasons, "ROUTING_SURFACE_OR_MODE_MIXING", key.replaceAll("\0", "/"));
+    }
+    if (trial.task.partition !== "ROUTING") {
+      addReason(rejectReasons, "ROUTING_PARTITION_MIXING", trial.trial_id);
+    }
+  }
+  for (const key of expected) {
+    if (!seen.has(key)) {
+      addReason(inconclusiveReasons, "MISSING_ROUTING_TRIAL", key.replaceAll("\0", "/"));
+    }
+  }
+  if (trials.some((trial) => trial.result === "INCONCLUSIVE")) {
+    addReason(inconclusiveReasons, "INCONCLUSIVE_ROUTING_TRIAL");
+  }
+  if (rejectReasons.length) {
+    return {decision: "REJECT", reasons: [...new Set(rejectReasons)]};
+  }
+  if (inconclusiveReasons.length) {
+    return {decision: "INCONCLUSIVE", reasons: [...new Set(inconclusiveReasons)]};
+  }
+  return {decision: "ADMIT", reasons: []};
+}
+
+export function aggregateTrials(trials, authority = buildEvaluationAuthority()) {
+  if (!Array.isArray(trials)) throw new Error("aggregate input must be an array");
+  const trialIds = new Set();
+  const slots = new Set();
+  const partitions = new Set();
+  const modes = new Set();
+  const surfaces = new Set();
+  const artifactsByCondition = new Map();
+
+  for (const trial of trials) {
+    validateTrialResult(trial, authority);
+    if (trialIds.has(trial.trial_id)) throw new Error(`duplicate trial id: ${trial.trial_id}`);
+    trialIds.add(trial.trial_id);
+    const slot = `${trial.task.task_id}\0${trial.condition}\0${trial.trial_index}\0${trial.activation.mode}\0${trial.activation.surface}`;
+    if (slots.has(slot)) {
+      throw new Error(`duplicate frozen trial slot: ${slot.replaceAll("\0", "/")}`);
+    }
+    slots.add(slot);
+    partitions.add(trial.task.partition);
+    modes.add(trial.activation.mode);
+    surfaces.add(trial.activation.surface);
+    const key = artifactSetKey(trial);
+    const known = artifactsByCondition.get(trial.condition) ?? new Set();
+    known.add(key);
+    artifactsByCondition.set(trial.condition, known);
+  }
+
+  if (partitions.size > 1) {
+    throw new Error("aggregate cannot mix development/qualification/routing/calibration partitions");
+  }
+  if (modes.size > 1) {
+    throw new Error("aggregate cannot mix conditioned and automatic/calibration activation modes");
+  }
+  if (surfaces.size > 1) {
+    throw new Error("aggregate cannot mix native and MCP surfaces");
+  }
+  for (const [condition, keys] of artifactsByCondition) {
+    if (keys.size > 1) {
+      throw new Error(`aggregate cannot mix Pryzael artifact identities within ${condition}`);
+    }
+  }
+
+  const contract = authority.contract;
+  const sorted = [...trials].sort((a, b) =>
+    [a.task.task_id, a.condition, String(a.trial_index), a.trial_id]
+      .join("\0")
+      .localeCompare(
+        [b.task.task_id, b.condition, String(b.trial_index), b.trial_id].join("\0"),
+        "en",
+      ),
+  );
+  const out = {totals: {}, byTask: {}, metrics: {}, criticalPredicates: {}, diagnostic: {}};
+  for (const trial of sorted) {
+    out.totals[trial.result] = (out.totals[trial.result] ?? 0) + 1;
+    out.byTask[trial.task.task_id] ??= {};
+    out.byTask[trial.task.task_id][trial.result] =
+      (out.byTask[trial.task.task_id][trial.result] ?? 0) + 1;
+    for (const observation of trial.metric_observations ?? []) {
+      const key = `${observation.metric_id}:${observation.value}`;
+      const role = contract.metric_definitions[observation.metric_id]?.admission_role;
+      const target = role === "DIAGNOSTIC" ? out.diagnostic : out.metrics;
+      target[key] = (target[key] ?? 0) + 1;
+    }
+    for (const observation of trial.predicate_observations ?? []) {
+      if (observation.predicate_role === "CRITICAL" &&
+          observation.result !== "NOT_VERIFIED") {
+        const key = `${observation.predicate_id}:${observation.result}`;
+        out.criticalPredicates[key] = (out.criticalPredicates[key] ?? 0) + 1;
+      }
+    }
+  }
+  return out;
 }

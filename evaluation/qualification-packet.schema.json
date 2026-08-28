@@ -31,8 +31,7 @@
           "prompt",
           "observable_success_predicates",
           "critical_failure_predicates",
-          "autonomy_focus",
-          "efficiency_focus",
+          "metric_applicability",
           "digest"
         ],
         "properties": {
@@ -115,16 +114,61 @@
               }
             }
           },
-          "autonomy_focus": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "efficiency_focus": {
-            "type": "array",
-            "items": {
-              "type": "string"
+          "metric_applicability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "FALSE_VERIFIED",
+              "INCONCLUSIVE_HANDLING",
+              "EVIDENCE_ADEQUACY",
+              "PREMATURE_CONVERGENCE",
+              "PATH_OVERCONSTRAINT",
+              "SOLUTION_CLASS_COLLAPSE",
+              "REPLANNING_COMPETENCE"
+            ],
+            "properties": {
+              "FALSE_VERIFIED": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "INCONCLUSIVE_HANDLING": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "EVIDENCE_ADEQUACY": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "PREMATURE_CONVERGENCE": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "PATH_OVERCONSTRAINT": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "SOLUTION_CLASS_COLLAPSE": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "REPLANNING_COMPETENCE": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              }
             }
           },
           "digest": {
