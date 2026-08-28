@@ -1,6 +1,6 @@
 {
   "name": "pryzael",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Rigorous engineering workflows for architecture, debugging, review, verification, and auditable handoffs.",
   "repository": "https://github.com/4i7/Pryzael",
   "keywords": [
@@ -8,13 +8,15 @@
     "architecture",
     "code-review",
     "debugging",
-    "verification"
+    "verification",
+    "mcp"
   ],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Pryzael",
     "shortDescription": "Engineering rigor for AI work",
-    "longDescription": "Reusable engineering workflows for architecture design, root-cause debugging, blast-radius analysis, adversarial review, verifiable multi-step execution, proof of completion, and auditable handoffs.",
+    "longDescription": "Reusable engineering workflows for architecture design, root-cause debugging, blast-radius analysis, adversarial review, verifiable multi-step execution, proof of completion, and auditable handoffs. The same workflow sources are exposed as Agent Skills and read-only MCP tools.",
     "category": "Developer Tools",
     "capabilities": [
       "Architecture design",
@@ -22,7 +24,8 @@
       "Adversarial code review",
       "Blast-radius analysis",
       "Verification planning",
-      "Auditable engineering handoffs"
+      "Auditable engineering handoffs",
+      "Read-only MCP workflow tools"
     ],
     "defaultPrompt": [
       "Architect this change before implementation and identify the invariants.",
