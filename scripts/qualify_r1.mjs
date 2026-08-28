@@ -37,6 +37,30 @@ function run(command, args, options = {}) {
   return options.capture ? result.stdout.trim() : "";
 }
 
+function runNpm(args, options = {}) {
+  const npmExecPath = process.env.npm_execpath;
+  if (npmExecPath && fs.existsSync(npmExecPath)) {
+    return run(process.execPath, [npmExecPath, ...args], options);
+  }
+  const command = process.platform === "win32" ? "npm.cmd" : "npm";
+  return run(command, args, options);
+}
+
+function packageBin(packageName, binName) {
+  const packageDir = path.join(ROOT, "node_modules", ...packageName.split("/"));
+  const manifestPath = path.join(packageDir, "package.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const relative = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.[binName];
+  if (typeof relative !== "string" || relative.length === 0) {
+    throw new Error(`${packageName}: missing ${binName} package binary`);
+  }
+  const executable = path.resolve(packageDir, relative);
+  if (!fs.statSync(executable).isFile()) {
+    throw new Error(`${packageName}: package binary is unavailable: ${executable}`);
+  }
+  return executable;
+}
+
 function available(command, args = ["--version"]) {
   const result = spawnSync(command, args, {
     cwd: ROOT,
@@ -62,7 +86,7 @@ function sortedSkillNames() {
 }
 
 function establishLockedDependencies() {
-  run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
+  runNpm(["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
 }
 
 function venvPythonPath() {
@@ -155,7 +179,7 @@ function dependencyIdentity() {
   const lockPath = path.join(ROOT, "package-lock.json");
   const lockBytes = fs.readFileSync(lockPath);
   const lock = JSON.parse(lockBytes);
-  const installed = JSON.parse(run("npm", ["ls", "--all", "--json"], { capture: true }));
+  const installed = JSON.parse(runNpm(["ls", "--all", "--json"], { capture: true }));
   const normalized = normalizeDependencyTree(installed);
   const serialized = JSON.stringify(normalized);
 
@@ -180,8 +204,8 @@ function gitIdentity() {
   };
 }
 
-function buildIdentity() {
-  const wranglerVersion = run("npx", ["--no-install", "wrangler", "--version"], { capture: true });
+function buildIdentity(wranglerBin) {
+  const wranglerVersion = run(process.execPath, [wranglerBin, "--version"], { capture: true });
   const wranglerConfig = fs.readFileSync(path.join(ROOT, "wrangler.jsonc"), "utf8");
   const compatibilityDate = wranglerConfig.match(/"compatibility_date"\s*:\s*"([^"]+)"/)?.[1] ?? null;
   return {
@@ -200,6 +224,7 @@ function main() {
   const python = findPython();
 
   establishLockedDependencies();
+  const wranglerBin = packageBin("wrangler", "wrangler");
 
   run(python, ["scripts/validate_skills.py"]);
   run(python, ["-m", "unittest", "tests/test_validate_skills.py"]);
@@ -234,9 +259,8 @@ function main() {
   ]);
 
   fs.rmSync(BUILD_OUT, { recursive: true, force: true });
-  run("npx", [
-    "--no-install",
-    "wrangler",
+  run(process.execPath, [
+    wranglerBin,
     "deploy",
     "--dry-run",
     "--outdir",
@@ -267,7 +291,7 @@ function main() {
     canonicalPackages: packages,
     generatedCatalog: catalog,
     dependencies: dependencyIdentity(),
-    build: buildIdentity(),
+    build: buildIdentity(wranglerBin),
     resourceEnvelope: totals,
     upstreamSpecValidation,
     frozenR1Contract: {
