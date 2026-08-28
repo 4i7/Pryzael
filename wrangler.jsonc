@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "pryzael",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "build": {
+    "command": "npm run generate:mcp-catalog",
+    "watch_dir": ["skills", "scripts/generate_mcp_catalog.mjs"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  }
+}
