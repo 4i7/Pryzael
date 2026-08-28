@@ -47,5 +47,9 @@ jobs:
       - name: Install current project dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
 
+      - name: Emit lockfile bootstrap payload
+        shell: bash
+        run: printf 'PACKAGE_LOCK_BASE64=' && base64 -w0 package-lock.json && printf '\n'
+
       - name: Run the single R1 qualification command
         run: npm run check
