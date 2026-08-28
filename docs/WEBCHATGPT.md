@@ -1,39 +1,37 @@
-# WebChatGPT deployment notes
+# Web ChatGPT deployment notes
 
-## Verified product model
+## Capability model
 
-OpenAI currently documents ChatGPT Skills as reusable workflows that follow the Agent Skills open standard. Installed skills may be selected explicitly or activated automatically when relevant. Skills can contain instructions, supporting files, and code and are scanned when uploaded.
+Pryzael has two independent Web-facing paths:
 
-Personal Skills availability depends on the ChatGPT plan/workspace/surface. Do not assume a repository being connected through GitHub makes its `skills/` directory automatically installed.
+1. **Personal/installed Skills** on ChatGPT surfaces that support native Skill execution.
+2. **MCP plugin tools** on ChatGPT surfaces that support custom MCP plugins/connectors.
 
-For the current public product documentation, see:
+Availability varies by product surface, plan, workspace, and feature rollout. Do not infer that a capability is callable merely because the model can mention it or the item appears installed.
 
-- https://help.openai.com/en/articles/20001066
-- https://openai.com/academy/skills/
-- https://agentskills.io/specification
+## Native Skills
 
-## Recommended deployment
+Treat GitHub as source/version control and an uploaded Skill as a deployed copy. Each Skill remains self-contained and can be uploaded independently where Personal Skills are supported.
 
-Treat GitHub as the versioned source of truth and the ChatGPT Skill installation as a deployed copy.
+Native Skill qualification should use only product-visible behavior available to an ordinary user. Hidden selector/load state is not measurement authority.
 
-For each skill:
+## MCP plugin path
 
-1. Validate the directory against the Agent Skills format.
-2. Review the skill and its bundled resources.
-3. Upload/install that individual skill through a supported ChatGPT Skills surface when available.
-4. Verify activation using both an explicit mention and a natural-language trigger.
-5. After repository updates, update/reinstall the deployed skill rather than assuming GitHub changes synchronize automatically.
+The repository's `.mcp.json` and `mcp/server.mjs` expose the same eight workflows as read-only MCP tools. A remote Web ChatGPT surface needs a reachable MCP endpoint; it cannot reach local stdio directly.
 
-## Why each skill is self-contained
+For development without third-party hosting, use OpenAI Secure MCP Tunnel when available. See [`MCP.md`](MCP.md).
 
-Agent Skills clients progressively load content inside the activated skill package. A reference outside the skill root is not a portable dependency. Therefore Pryzael keeps composition references by skill name and keeps only package-local supporting files under `references/`, `assets/`, or `scripts/`.
+A valid Chat-side qualification requires an observable tool execution. The following are not sufficient by themselves:
+
+- the plugin appearing in an installed list;
+- the model saying it knows the plugin exists;
+- a guessed/internal package identity;
+- behavior that could have been produced without the MCP tool.
 
 ## GitHub use
 
-GitHub access varies by ChatGPT surface and connector configuration. Portable Pryzael skills assume read access only. A session may expose stronger write operations, but writes are never required for analysis/review and are used only when the user requests a mutation.
+The MCP bridge does not embed or proxy GitHub. `interrogate` and other workflows use GitHub only when the active ChatGPT session separately exposes an authorized GitHub capability. Otherwise they must preserve missing evidence as `INCONCLUSIVE` where appropriate.
 
-For exact-head review, use `interrogate`; it contains a package-local GitHub identity contract.
+## Fallback
 
-## Fallback when Skills installation is unavailable
-
-The repository remains usable as prompt material: fetch the relevant `SKILL.md` from the exact repository commit and ask ChatGPT to follow it for that task. This is not equivalent to an installed Skill because automatic discovery/composition is absent, but it preserves the workflow semantics.
+If neither native Skills nor MCP execution is available on the intended ChatGPT surface, the repository can still be used as explicit prompt material by supplying the relevant `SKILL.md`. That preserves workflow semantics but not automatic discovery/tool selection.
