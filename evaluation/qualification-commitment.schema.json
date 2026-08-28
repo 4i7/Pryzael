@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4i7/Pryzael/evaluation/qualification-commitment.schema.json",
+  "title": "Pryzael public hidden-packet commitment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_set_id",
+    "packet_schema_version",
+    "packet_sha256",
+    "packet_bytes",
+    "task_count",
+    "task_index",
+    "created_by_authority",
+    "frozen_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "r4-qualification-commitment-v1"
+    },
+    "status": {
+      "const": "FROZEN_BEFORE_BASELINE"
+    },
+    "qualification_set_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "packet_schema_version": {
+      "const": "r4-qualification-packet-v1"
+    },
+    "packet_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "packet_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "task_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "task_index": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "task_id",
+          "family",
+          "task_digest"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "family": {
+            "type": "string",
+            "minLength": 1
+          },
+          "task_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "created_by_authority": {
+      "type": "string",
+      "minLength": 1
+    },
+    "frozen_at": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}
