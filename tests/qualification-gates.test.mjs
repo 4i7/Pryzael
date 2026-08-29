@@ -15,7 +15,11 @@ import {
   qualifyHeadSemanticAuthority,
   validateHeadSemanticAuthority,
 } from "../scripts/qualify_head_semantic_authority.mjs";
-import { assertCurrentCatalogMatchesGenerated } from "../scripts/qualify_r1.mjs";
+import {
+  assertCurrentCatalogMatchesGenerated,
+  assertGeneratedCatalogUntracked,
+  qualifyEphemeralGeneratedCatalog,
+} from "../scripts/qualify_r1.mjs";
 import {
   parseCanonicalSkillMarkdown,
   projectCanonicalSkill,
@@ -114,6 +118,24 @@ function withAuthorityRepo(callback) {
   }
 }
 
+function withGeneratedCatalogRepo(callback) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pryzael-generated-boundary-"));
+  try {
+    runGit(root, ["init", "-q"]);
+    runGit(root, ["config", "user.name", "Pryzael Test"]);
+    runGit(root, ["config", "user.email", "pryzael-test@example.invalid"]);
+    fs.writeFileSync(path.join(root, ".gitignore"), "worker/generated/\n", "utf8");
+    commitAll(root, "baseline");
+    return callback({
+      root,
+      catalogPath: path.join(root, "worker", "generated", "catalog.mjs"),
+      repoPath: "worker/generated/catalog.mjs",
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function withValidationSkill(markdown, callback) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pryzael-validation-"));
   try {
@@ -202,6 +224,15 @@ test("HEAD semantic authority data is generic, deterministic, and package-scoped
   };
   assert.deepEqual(validateHeadSemanticAuthority(input), input);
 
+  assert.throws(() => validateHeadSemanticAuthority(null), /must be a JSON object/);
+  assert.throws(
+    () => validateHeadSemanticAuthority({ ...input, schemaVersion: 2 }),
+    /unsupported HEAD semantic authority schema/,
+  );
+  assert.throws(
+    () => validateHeadSemanticAuthority({ ...input, baselineCanonicalSkillTree: "not-a-sha" }),
+    /40-character lowercase Git SHA-1/,
+  );
   assert.throws(
     () => validateHeadSemanticAuthority({
       ...input,
@@ -212,7 +243,14 @@ test("HEAD semantic authority data is generic, deterministic, and package-scoped
   assert.throws(
     () => validateHeadSemanticAuthority({
       ...input,
-      admittedCanonicalPackages: ["skills\/architect"],
+      admittedCanonicalPackages: ["architect", "architect"],
+    }),
+    /must not contain duplicates/,
+  );
+  assert.throws(
+    () => validateHeadSemanticAuthority({
+      ...input,
+      admittedCanonicalPackages: ["skills/architect"],
     }),
     /invalid admitted canonical package name/,
   );
@@ -226,6 +264,66 @@ test("HEAD semantic authority data is generic, deterministic, and package-scoped
     }),
     /baselineCanonicalPackageTrees must use deterministic ordinal ordering/,
   );
+});
+
+test("HEAD authority always dereferences the declared baseline Skill tree from Git", async (t) => {
+  await t.test("syntactically valid nonexistent baseline object fails", () => withAuthorityRepo(({ root, authority }) => {
+    const nonexistent = structuredClone(authority);
+    nonexistent.baselineCanonicalSkillTree = "f".repeat(40);
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority: nonexistent }),
+      /git cat-file -t .* exited/,
+    );
+  }));
+
+  await t.test("non-tree baseline object fails", () => withAuthorityRepo(({ root, authority }) => {
+    const nonTree = structuredClone(authority);
+    nonTree.baselineCanonicalSkillTree = runGit(root, ["rev-parse", "HEAD"]);
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority: nonTree }),
+      /must resolve to a Git tree/,
+    );
+  }));
+
+  await t.test("unexpected baseline tree structure fails", () => withAuthorityRepo(({ root, authority }) => {
+    fs.writeFileSync(path.join(root, "skills", "README.md"), "not a package\n", "utf8");
+    commitAll(root, "add malformed top-level skills entry");
+    const malformed = structuredClone(authority);
+    malformed.baselineCanonicalSkillTree = runGit(root, ["rev-parse", "HEAD:skills"]);
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority: malformed }),
+      /baseline canonical Skill tree contains a non-package entry/,
+    );
+  }));
+});
+
+test("baseline package identities are reconstructed from Git on every HEAD-authority qualification", () => {
+  withAuthorityRepo(({ root, authority }) => {
+    fs.writeFileSync(
+      path.join(root, "skills", "architect", "SKILL.md"),
+      skillMarkdown("architect", "Authorized current semantic mutation."),
+      "utf8",
+    );
+    commitAll(root, "mutate architect");
+
+    const corrupted = structuredClone(authority);
+    corrupted.baselineCanonicalPackageTrees.architect = "0".repeat(40);
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority: corrupted }),
+      /baselineCanonicalPackageTrees does not exactly match the Git-derived baseline/,
+    );
+  });
+});
+
+test("unknown admitted package is rejected even without a current mutation", () => {
+  withAuthorityRepo(({ root, authority }) => {
+    const corrupted = structuredClone(authority);
+    corrupted.admittedCanonicalPackages = ["architect", "future-package"];
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority: corrupted }),
+      /admits package absent from baseline canonical Skill tree: future-package/,
+    );
+  });
 });
 
 test("admitted architect semantic mutation passes HEAD authority without requiring historical R1 equality", () => {
@@ -274,25 +372,43 @@ test("non-admitted canonical package semantic mutation fails HEAD authority", ()
   });
 });
 
-test("top-level Skill additions, deletions, and renames fail closed unless the affected packages are admitted", async (t) => {
+test("top-level Skill package-set changes fail before subtree admission is evaluated", async (t) => {
   await t.test("addition", () => withAuthorityRepo(({ root, authority }) => {
     const added = path.join(root, "skills", "new-skill");
     fs.mkdirSync(added, { recursive: true });
     fs.writeFileSync(path.join(added, "SKILL.md"), skillMarkdown("new-skill"), "utf8");
     commitAll(root, "add skill");
-    assert.throws(() => qualifyHeadSemanticAuthority({ cwd: root, authority }), /new-skill/);
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority }),
+      /top-level Skill package set differs from baseline: added=new-skill; deleted=NONE/,
+    );
   }));
 
   await t.test("deletion", () => withAuthorityRepo(({ root, authority }) => {
     fs.rmSync(path.join(root, "skills", "prove-it-works"), { recursive: true, force: true });
     commitAll(root, "delete skill");
-    assert.throws(() => qualifyHeadSemanticAuthority({ cwd: root, authority }), /prove-it-works/);
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority }),
+      /top-level Skill package set differs from baseline: added=NONE; deleted=prove-it-works/,
+    );
   }));
 
   await t.test("rename", () => withAuthorityRepo(({ root, authority }) => {
     fs.renameSync(path.join(root, "skills", "architect"), path.join(root, "skills", "architect-next"));
     commitAll(root, "rename skill");
-    assert.throws(() => qualifyHeadSemanticAuthority({ cwd: root, authority }), /architect-next/);
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority }),
+      /top-level Skill package set differs from baseline: added=architect-next; deleted=architect/,
+    );
+  }));
+
+  await t.test("deletion of admitted architect still fails", () => withAuthorityRepo(({ root, authority }) => {
+    fs.rmSync(path.join(root, "skills", "architect"), { recursive: true, force: true });
+    commitAll(root, "delete admitted architect");
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority }),
+      /top-level Skill package set differs from baseline: added=NONE; deleted=architect/,
+    );
   }));
 });
 
@@ -302,7 +418,83 @@ test("baseline package identities are self-checked when the canonical Skill tree
     corrupted.baselineCanonicalPackageTrees.architect = "0".repeat(40);
     assert.throws(
       () => qualifyHeadSemanticAuthority({ cwd: root, authority: corrupted }),
-      /do not reconstruct the baseline canonical Skill tree contents/,
+      /baselineCanonicalPackageTrees does not exactly match the Git-derived baseline/,
+    );
+  });
+});
+
+test("ephemeral generated catalog is reconstructed from clean checkout and ignores untracked residue", async (t) => {
+  await t.test("clean checkout absence generates twice with byte identity", () => withGeneratedCatalogRepo(({ root, catalogPath, repoPath }) => {
+    assert.equal(fs.existsSync(catalogPath), false);
+    let generationCount = 0;
+    const qualified = qualifyEphemeralGeneratedCatalog({
+      cwd: root,
+      catalogPath,
+      repoPath,
+      generate: () => {
+        generationCount += 1;
+        fs.mkdirSync(path.dirname(catalogPath), { recursive: true });
+        fs.writeFileSync(catalogPath, "deterministic canonical projection\n", "utf8");
+      },
+    });
+    assert.equal(generationCount, 2);
+    assert.equal(qualified.toString("utf8"), "deterministic canonical projection\n");
+    assert.equal(fs.readFileSync(catalogPath, "utf8"), "deterministic canonical projection\n");
+  }));
+
+  await t.test("arbitrary ignored residue is not qualification authority", () => withGeneratedCatalogRepo(({ root, catalogPath, repoPath }) => {
+    fs.mkdirSync(path.dirname(catalogPath), { recursive: true });
+    fs.writeFileSync(catalogPath, "arbitrary stale local residue\n", "utf8");
+    const qualified = qualifyEphemeralGeneratedCatalog({
+      cwd: root,
+      catalogPath,
+      repoPath,
+      generate: () => {
+        fs.mkdirSync(path.dirname(catalogPath), { recursive: true });
+        fs.writeFileSync(catalogPath, "deterministic canonical projection\n", "utf8");
+      },
+    });
+    assert.equal(qualified.toString("utf8"), "deterministic canonical projection\n");
+    assert.equal(fs.readFileSync(catalogPath, "utf8"), "deterministic canonical projection\n");
+  }));
+
+  await t.test("non-deterministic regeneration fails", () => withGeneratedCatalogRepo(({ root, catalogPath, repoPath }) => {
+    let generationCount = 0;
+    assert.throws(
+      () => qualifyEphemeralGeneratedCatalog({
+        cwd: root,
+        catalogPath,
+        repoPath,
+        generate: () => {
+          generationCount += 1;
+          fs.mkdirSync(path.dirname(catalogPath), { recursive: true });
+          fs.writeFileSync(catalogPath, `projection-${generationCount}\n`, "utf8");
+        },
+      }),
+      /not byte-for-byte deterministic/,
+    );
+  }));
+});
+
+test("tracked generated catalog is rejected by Git/index evidence", () => {
+  withGeneratedCatalogRepo(({ root, catalogPath, repoPath }) => {
+    fs.mkdirSync(path.dirname(catalogPath), { recursive: true });
+    fs.writeFileSync(catalogPath, "tracked generated artifact\n", "utf8");
+    runGit(root, ["add", "-f", repoPath]);
+    runGit(root, ["commit", "-q", "-m", "track generated artifact"]);
+
+    assert.throws(
+      () => assertGeneratedCatalogUntracked({ cwd: root, repoPath }),
+      /must remain untracked ephemeral derived output/,
+    );
+    assert.throws(
+      () => qualifyEphemeralGeneratedCatalog({
+        cwd: root,
+        catalogPath,
+        repoPath,
+        generate: () => fs.writeFileSync(catalogPath, "replacement\n", "utf8"),
+      }),
+      /must remain untracked ephemeral derived output/,
     );
   });
 });

@@ -16,6 +16,7 @@ import {
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
 const CATALOG_PATH = path.join(ROOT, "worker", "generated", "catalog.mjs");
+const CATALOG_REPO_PATH = "worker/generated/catalog.mjs";
 const FROZEN_CONTRACT_PATH = path.join(ROOT, "tests", "fixtures", "r1-qualified-contract.json");
 const REPORT_PATH = path.join(ROOT, "dist", "r1-qualification.json");
 const BUILD_OUT = path.join(ROOT, ".qualification-dist");
@@ -158,28 +159,67 @@ export function assertCurrentCatalogMatchesGenerated(currentBytes, generatedByte
   return true;
 }
 
-function deterministicCatalog() {
-  const existing = fs.existsSync(CATALOG_PATH) && fs.statSync(CATALOG_PATH).isFile()
-    ? fs.readFileSync(CATALOG_PATH)
-    : null;
-
-  run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
-  const first = fs.readFileSync(CATALOG_PATH);
-  if (existing !== null) {
-    try {
-      assertCurrentCatalogMatchesGenerated(existing, first);
-    } catch (error) {
-      fs.writeFileSync(CATALOG_PATH, existing);
-      throw error;
-    }
+export function assertGeneratedCatalogUntracked({ cwd = ROOT, repoPath = CATALOG_REPO_PATH } = {}) {
+  const result = spawnSync("git", ["ls-files", "--error-unmatch", "--", repoPath], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: false,
+  });
+  if (result.error) throw result.error;
+  if (result.status === 0) {
+    throw new Error(`${repoPath} must remain untracked ephemeral derived output`);
   }
+  if (result.status !== 1) {
+    throw new Error(
+      `git ls-files failed while proving generated catalog is untracked: status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+    );
+  }
+  return true;
+}
 
-  run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
-  const second = fs.readFileSync(CATALOG_PATH);
+export function qualifyEphemeralGeneratedCatalog({ cwd, catalogPath, repoPath, generate }) {
+  if (typeof generate !== "function") {
+    throw new Error("generated catalog qualification requires a generation function");
+  }
+  assertGeneratedCatalogUntracked({ cwd, repoPath });
+
+  fs.rmSync(catalogPath, { force: true });
+  generate();
+  if (!fs.existsSync(catalogPath) || !fs.statSync(catalogPath).isFile()) {
+    throw new Error("generated catalog was not produced by the canonical generator");
+  }
+  const first = fs.readFileSync(catalogPath);
+
+  fs.rmSync(catalogPath, { force: true });
+  generate();
+  if (!fs.existsSync(catalogPath) || !fs.statSync(catalogPath).isFile()) {
+    throw new Error("generated catalog was not reproduced by the canonical generator");
+  }
+  const second = fs.readFileSync(catalogPath);
   if (!first.equals(second)) {
     throw new Error("MCP catalog generation is not byte-for-byte deterministic");
   }
+
+  return first;
+}
+
+function deterministicCatalog() {
+  qualifyEphemeralGeneratedCatalog({
+    cwd: ROOT,
+    catalogPath: CATALOG_PATH,
+    repoPath: CATALOG_REPO_PATH,
+    generate: () => run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]),
+  });
   return catalogFileIdentity(CATALOG_PATH);
+}
+
+function assertCatalogIdentityPreserved(expected, stage) {
+  const actual = catalogFileIdentity(CATALOG_PATH);
+  if (actual.digest !== expected.digest || actual.bytes !== expected.bytes) {
+    throw new Error(`${stage} changed the qualified deterministic catalog identity`);
+  }
+  return true;
 }
 
 function normalizeDependencyTree(node) {
@@ -294,6 +334,7 @@ function main() {
     "tests/structural-conformance.test.mjs",
     "worker/index.test.mjs",
   ]);
+  assertCatalogIdentityPreserved(catalog, "structural/runtime validation");
 
   fs.rmSync(BUILD_OUT, { recursive: true, force: true });
   run(process.execPath, [
@@ -303,10 +344,7 @@ function main() {
     "--outdir",
     BUILD_OUT,
   ]);
-  const postBuildCatalog = catalogFileIdentity(CATALOG_PATH);
-  if (postBuildCatalog.digest !== catalog.digest || postBuildCatalog.bytes !== catalog.bytes) {
-    throw new Error("build dry-run changed the deterministic catalog identity");
-  }
+  assertCatalogIdentityPreserved(catalog, "Wrangler dry-run build");
   fs.rmSync(BUILD_OUT, { recursive: true, force: true });
 
   const totals = Object.values(packages).reduce(
@@ -324,10 +362,14 @@ function main() {
     parserContractFixtures: "PASS",
     pinnedIndependentUpstreamValidation: "PASS",
     validatorRegressionTests: "PASS",
+    generatedCatalogUntracked: "PASS",
+    generatedResidueNeutralized: "PASS",
     generation: "PASS",
     freshness: "PASS",
     deterministicGeneration: "PASS",
+    repeatedGenerationByteIdentity: "PASS",
     canonicalProjectionConformance: "PASS",
+    generatedProjectionConsumerIdentity: "PASS",
     workerProtocolTests: "PASS",
     malformedAndResourceBoundaryTests: "PASS",
     wranglerBuildDryRun: "PASS",

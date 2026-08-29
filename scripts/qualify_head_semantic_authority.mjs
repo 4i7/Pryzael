@@ -89,18 +89,30 @@ export function validateHeadSemanticAuthority(authority) {
   };
 }
 
-function currentCanonicalPackageTrees(cwd) {
-  const output = runGit(cwd, ["ls-tree", "HEAD:skills"]);
+function canonicalPackageTreesAtSkillTree(cwd, skillTreeSha, context) {
+  const objectType = runGit(cwd, ["cat-file", "-t", skillTreeSha]);
+  if (objectType !== "tree") {
+    throw new Error(`${context} canonical Skill object must resolve to a Git tree: ${skillTreeSha} (${objectType})`);
+  }
+
+  const output = runGit(cwd, ["ls-tree", skillTreeSha]);
   const packageTrees = {};
 
   for (const line of output.split("\n").filter(Boolean)) {
     const match = line.match(/^040000 tree ([0-9a-f]{40})\t(.+)$/);
     if (!match) {
-      throw new Error(`canonical skills tree contains a non-package entry: ${line}`);
+      throw new Error(`${context} canonical Skill tree contains a non-package entry: ${line}`);
     }
     const [, treeSha, name] = match;
-    validatePackageName(name, "current");
+    validatePackageName(name, context);
+    if (Object.hasOwn(packageTrees, name)) {
+      throw new Error(`${context} canonical Skill tree contains duplicate package entry: ${name}`);
+    }
     packageTrees[name] = treeSha;
+  }
+
+  if (Object.keys(packageTrees).length === 0) {
+    throw new Error(`${context} canonical Skill tree must contain at least one package`);
   }
 
   return Object.fromEntries(
@@ -112,28 +124,52 @@ function samePackageTreeMap(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function assertSamePackageNameSet(baseline, current) {
+  const baselineNames = Object.keys(baseline);
+  const currentNames = Object.keys(current);
+  if (JSON.stringify(baselineNames) === JSON.stringify(currentNames)) return;
+
+  const baselineSet = new Set(baselineNames);
+  const currentSet = new Set(currentNames);
+  const added = currentNames.filter((name) => !baselineSet.has(name));
+  const deleted = baselineNames.filter((name) => !currentSet.has(name));
+  throw new Error(
+    `canonical top-level Skill package set differs from baseline: added=${added.join(",") || "NONE"}; deleted=${deleted.join(",") || "NONE"}`,
+  );
+}
+
 function changedPackagesFromTrees(baseline, current) {
-  const names = [...new Set([...Object.keys(baseline), ...Object.keys(current)])].sort(ordinalCompare);
-  return names.filter((name) => baseline[name] !== current[name]);
+  return Object.keys(baseline).filter((name) => baseline[name] !== current[name]);
 }
 
 export function qualifyHeadSemanticAuthority({ cwd = ROOT, authority }) {
   const normalized = validateHeadSemanticAuthority(authority);
+
+  const reconstructedBaselinePackageTrees = canonicalPackageTreesAtSkillTree(
+    cwd,
+    normalized.baselineCanonicalSkillTree,
+    "baseline",
+  );
+  if (!samePackageTreeMap(reconstructedBaselinePackageTrees, normalized.baselineCanonicalPackageTrees)) {
+    throw new Error("HEAD semantic authority baselineCanonicalPackageTrees does not exactly match the Git-derived baseline canonical Skill tree");
+  }
+
+  const baselineNames = new Set(Object.keys(reconstructedBaselinePackageTrees));
+  const unknownAdmitted = normalized.admittedCanonicalPackages.filter((name) => !baselineNames.has(name));
+  if (unknownAdmitted.length > 0) {
+    throw new Error(`HEAD semantic authority admits package absent from baseline canonical Skill tree: ${unknownAdmitted.join(", ")}`);
+  }
+
   const currentTree = runGit(cwd, ["rev-parse", "HEAD:skills"]);
   if (!SHA1_PATTERN.test(currentTree)) {
     throw new Error(`current canonical Skill tree is not a Git SHA-1: ${currentTree}`);
   }
+  const currentPackageTrees = canonicalPackageTreesAtSkillTree(cwd, currentTree, "current");
 
-  const currentPackageTrees = currentCanonicalPackageTrees(cwd);
-  if (
-    currentTree === normalized.baselineCanonicalSkillTree &&
-    !samePackageTreeMap(currentPackageTrees, normalized.baselineCanonicalPackageTrees)
-  ) {
-    throw new Error("HEAD semantic authority baseline package identities do not reconstruct the baseline canonical Skill tree contents");
-  }
+  assertSamePackageNameSet(reconstructedBaselinePackageTrees, currentPackageTrees);
 
   const changedPackages = changedPackagesFromTrees(
-    normalized.baselineCanonicalPackageTrees,
+    reconstructedBaselinePackageTrees,
     currentPackageTrees,
   );
   const admitted = new Set(normalized.admittedCanonicalPackages);
