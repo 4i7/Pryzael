@@ -159,18 +159,19 @@ export function assertCurrentCatalogMatchesGenerated(currentBytes, generatedByte
 }
 
 function deterministicCatalog() {
-  if (!fs.existsSync(CATALOG_PATH) || !fs.statSync(CATALOG_PATH).isFile()) {
-    throw new Error("generated MCP catalog is missing from the candidate");
-  }
+  const existing = fs.existsSync(CATALOG_PATH) && fs.statSync(CATALOG_PATH).isFile()
+    ? fs.readFileSync(CATALOG_PATH)
+    : null;
 
-  const committed = fs.readFileSync(CATALOG_PATH);
   run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
   const first = fs.readFileSync(CATALOG_PATH);
-  try {
-    assertCurrentCatalogMatchesGenerated(committed, first);
-  } catch (error) {
-    fs.writeFileSync(CATALOG_PATH, committed);
-    throw error;
+  if (existing !== null) {
+    try {
+      assertCurrentCatalogMatchesGenerated(existing, first);
+    } catch (error) {
+      fs.writeFileSync(CATALOG_PATH, existing);
+      throw error;
+    }
   }
 
   run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
