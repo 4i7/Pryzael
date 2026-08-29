@@ -27,6 +27,12 @@ function createServer() {
         },
       },
       async ({ resource }) => {
+            console.log({
+              event: "pryzael_tool_call",
+              skill: skill.name,
+              tool: skill.toolName,
+              kind: resource === undefined ? "workflow" : "resource",
+            });
         if (resource !== undefined) {
           const text = skill.resources[resource];
           if (typeof text !== "string") {
