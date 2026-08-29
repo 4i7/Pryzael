@@ -52,6 +52,13 @@ jobs:
           mkdir -p node_modules
           printf 'stale dependency fixture\n' > node_modules/pryzael-r1-stale-marker
 
+      - name: Run standalone fail-closed R1 qualification
+        run: npm run check
+
+      - name: Prove lockfile install replaced stale dependency environment
+        shell: bash
+        run: test ! -e node_modules/pryzael-r1-stale-marker
+
       - name: Verify historical R1 oracle for qualification-architecture-only changes
         if: github.event_name == 'pull_request'
         shell: bash
@@ -68,10 +75,3 @@ jobs:
               npm run qualify:r1:frozen
             fi
           fi
-
-      - name: Run standalone fail-closed R1 qualification
-        run: npm run check
-
-      - name: Prove lockfile install replaced stale dependency environment
-        shell: bash
-        run: test ! -e node_modules/pryzael-r1-stale-marker
