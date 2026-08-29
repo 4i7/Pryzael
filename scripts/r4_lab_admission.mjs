@@ -29,6 +29,43 @@ function validateTrialCollection(trials, authority, rejectReasons) {
   }
 }
 
+function validateComparisonCompleteness(trials, contract, inconclusiveReasons) {
+  const conditions = ["CURRENT_PRYZAEL", "CANDIDATE_PRYZAEL"];
+  const completeness = Object.fromEntries(conditions.map((condition) => [condition, true]));
+
+  for (const condition of conditions) {
+    const records = trials.filter((trial) => trial.condition === condition);
+    const conditionReasons = [];
+    checkAuthoritativeInconclusive(records, contract, conditionReasons);
+
+    for (const trial of records) {
+      for (const predicate of trial.predicate_observations.filter(
+        (item) => item.predicate_role === "CRITICAL",
+      )) {
+        if (predicate.result !== "INCONCLUSIVE") continue;
+        addReason(
+          conditionReasons,
+          condition === "CURRENT_PRYZAEL" ?
+            "CURRENT_CRITICAL_PREDICATE_INCONCLUSIVE" :
+            "INCONCLUSIVE_CRITICAL_PREDICATE",
+          `${trial.task.task_id}/${predicate.predicate_id}/${trial.trial_id}`,
+        );
+      }
+    }
+
+    if (conditionReasons.length) {
+      completeness[condition] = false;
+      addReason(inconclusiveReasons, "COMPARISON_EVIDENCE_INCOMPLETE", condition);
+      inconclusiveReasons.push(...conditionReasons);
+    }
+  }
+
+  return {
+    currentComplete: completeness.CURRENT_PRYZAEL,
+    candidateComplete: completeness.CANDIDATE_PRYZAEL,
+  };
+}
+
 export function evaluateCandidateAdmission(
   trials,
   authority = null,
@@ -73,9 +110,14 @@ export function evaluateCandidateAdmission(
 
   const candidate = trials.filter((item) => item.condition === "CANDIDATE_PRYZAEL");
   criticalPredicateStatus(candidate, rejectReasons, inconclusiveReasons);
-  checkAuthoritativeInconclusive(candidate, authority.contract, inconclusiveReasons);
+  const comparisonCompleteness = validateComparisonCompleteness(
+    trials,
+    authority.contract,
+    inconclusiveReasons,
+  );
 
-  if (!inconclusiveReasons.some((reason) => reason.startsWith("MISSING_REQUIRED_TRIAL:"))) {
+  if (comparisonCompleteness.currentComplete &&
+      !inconclusiveReasons.some((reason) => reason.startsWith("MISSING_REQUIRED_TRIAL:"))) {
     executeMetricAdmissionPolicies(trials, authority, rejectReasons);
   }
 
