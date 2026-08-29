@@ -295,10 +295,15 @@ test("generated-only semantic drift is rejected when canonical source is unchang
   );
 });
 
-test("shared parser continues to reject malformed canonical package semantics", () => {
-  const parsed = parseCanonicalSkillMarkdown("---\ndescription: \"missing name\"\n---\n\nbody\n");
-  assert.ok(parsed.errors.length > 0);
-  assert.throws(() => projectCanonicalSkill(parsed, "demo-skill"));
+test("shared parser continues to reject malformed canonical package syntax", () => {
+  const parsed = parseCanonicalSkillMarkdown(
+    "name: demo-skill\ndescription: missing opening delimiter\n---\nBody\n",
+  );
+  assert.ok(parsed.errors.some((error) => error.includes("missing opening YAML frontmatter delimiter")));
+  assert.throws(
+    () => projectCanonicalSkill(parsed, "demo-skill"),
+    /missing opening YAML frontmatter delimiter/,
+  );
 });
 
 test("validator continues to reject broken owner-local resource references", () => {
