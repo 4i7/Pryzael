@@ -16,6 +16,7 @@ import {
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
 const CATALOG_PATH = path.join(ROOT, "worker", "generated", "catalog.mjs");
+const CATALOG_REPO_PATH = "worker/generated/catalog.mjs";
 const FROZEN_CONTRACT_PATH = path.join(ROOT, "tests", "fixtures", "r1-qualified-contract.json");
 const REPORT_PATH = path.join(ROOT, "dist", "r1-qualification.json");
 const BUILD_OUT = path.join(ROOT, ".qualification-dist");
@@ -149,16 +150,76 @@ function establishPinnedUpstreamValidation(systemPython, skillNames) {
   };
 }
 
-function deterministicCatalog() {
-  fs.rmSync(path.dirname(CATALOG_PATH), { recursive: true, force: true });
-  run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
-  const first = fs.readFileSync(CATALOG_PATH);
-  run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
-  const second = fs.readFileSync(CATALOG_PATH);
+export function assertCurrentCatalogMatchesGenerated(currentBytes, generatedBytes) {
+  const current = Buffer.isBuffer(currentBytes) ? currentBytes : Buffer.from(currentBytes);
+  const generated = Buffer.isBuffer(generatedBytes) ? generatedBytes : Buffer.from(generatedBytes);
+  if (!current.equals(generated)) {
+    throw new Error("generated MCP catalog is stale or was modified independently of canonical Skill source");
+  }
+  return true;
+}
+
+export function assertGeneratedCatalogUntracked({ cwd = ROOT, repoPath = CATALOG_REPO_PATH } = {}) {
+  const result = spawnSync("git", ["ls-files", "--error-unmatch", "--", repoPath], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: false,
+  });
+  if (result.error) throw result.error;
+  if (result.status === 0) {
+    throw new Error(`${repoPath} must remain untracked ephemeral derived output`);
+  }
+  if (result.status !== 1) {
+    throw new Error(
+      `git ls-files failed while proving generated catalog is untracked: status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+    );
+  }
+  return true;
+}
+
+export function qualifyEphemeralGeneratedCatalog({ cwd, catalogPath, repoPath, generate }) {
+  if (typeof generate !== "function") {
+    throw new Error("generated catalog qualification requires a generation function");
+  }
+  assertGeneratedCatalogUntracked({ cwd, repoPath });
+
+  fs.rmSync(catalogPath, { force: true });
+  generate();
+  if (!fs.existsSync(catalogPath) || !fs.statSync(catalogPath).isFile()) {
+    throw new Error("generated catalog was not produced by the canonical generator");
+  }
+  const first = fs.readFileSync(catalogPath);
+
+  fs.rmSync(catalogPath, { force: true });
+  generate();
+  if (!fs.existsSync(catalogPath) || !fs.statSync(catalogPath).isFile()) {
+    throw new Error("generated catalog was not reproduced by the canonical generator");
+  }
+  const second = fs.readFileSync(catalogPath);
   if (!first.equals(second)) {
     throw new Error("MCP catalog generation is not byte-for-byte deterministic");
   }
+
+  return first;
+}
+
+function deterministicCatalog() {
+  qualifyEphemeralGeneratedCatalog({
+    cwd: ROOT,
+    catalogPath: CATALOG_PATH,
+    repoPath: CATALOG_REPO_PATH,
+    generate: () => run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]),
+  });
   return catalogFileIdentity(CATALOG_PATH);
+}
+
+function assertCatalogIdentityPreserved(expected, stage) {
+  const actual = catalogFileIdentity(CATALOG_PATH);
+  if (actual.digest !== expected.digest || actual.bytes !== expected.bytes) {
+    throw new Error(`${stage} changed the qualified deterministic catalog identity`);
+  }
+  return true;
 }
 
 function normalizeDependencyTree(node) {
@@ -216,7 +277,15 @@ function buildIdentity(wranglerBin) {
   };
 }
 
+function qualificationMode() {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return { frozen: false };
+  if (args.length === 1 && args[0] === "--frozen") return { frozen: true };
+  throw new Error(`unsupported R1 qualification arguments: ${args.join(" ")}`);
+}
+
 function main() {
+  const mode = qualificationMode();
   fs.rmSync(REPORT_PATH, { force: true });
   fs.rmSync(BUILD_OUT, { recursive: true, force: true });
 
@@ -240,23 +309,32 @@ function main() {
       canonicalPackageIdentity(path.join(SKILLS_DIR, skillName)),
     ]),
   );
-  const frozenContract = JSON.parse(fs.readFileSync(FROZEN_CONTRACT_PATH, "utf8"));
-  const skillsTreeGitSha = run("git", ["rev-parse", "HEAD:skills"], { capture: true });
 
-  assertFrozenR1Contract({
-    fixture: frozenContract,
-    pluginVersion: manifest.version,
-    skillNames,
-    packageIdentities: packages,
-    catalogIdentity: catalog,
-    skillsTreeGitSha,
-  });
+  let historicalR1ArtifactIdentity = null;
+  if (mode.frozen) {
+    const frozenContract = JSON.parse(fs.readFileSync(FROZEN_CONTRACT_PATH, "utf8"));
+    const skillsTreeGitSha = run("git", ["rev-parse", "HEAD:skills"], { capture: true });
+    assertFrozenR1Contract({
+      fixture: frozenContract,
+      pluginVersion: manifest.version,
+      skillNames,
+      packageIdentities: packages,
+      catalogIdentity: catalog,
+      skillsTreeGitSha,
+    });
+    historicalR1ArtifactIdentity = {
+      status: "PASS",
+      fixture: "tests/fixtures/r1-qualified-contract.json",
+      provenance: frozenContract.provenance,
+    };
+  }
 
   run(process.execPath, [
     "--test",
     "tests/structural-conformance.test.mjs",
     "worker/index.test.mjs",
   ]);
+  assertCatalogIdentityPreserved(catalog, "structural/runtime validation");
 
   fs.rmSync(BUILD_OUT, { recursive: true, force: true });
   run(process.execPath, [
@@ -266,10 +344,7 @@ function main() {
     "--outdir",
     BUILD_OUT,
   ]);
-  const postBuildCatalog = catalogFileIdentity(CATALOG_PATH);
-  if (postBuildCatalog.digest !== catalog.digest || postBuildCatalog.bytes !== catalog.bytes) {
-    throw new Error("build dry-run changed the deterministic catalog identity");
-  }
+  assertCatalogIdentityPreserved(catalog, "Wrangler dry-run build");
   fs.rmSync(BUILD_OUT, { recursive: true, force: true });
 
   const totals = Object.values(packages).reduce(
@@ -282,9 +357,29 @@ function main() {
     { canonicalBytes: 0, resourceFiles: 0, largestResourceBytes: 0, symlinks: 0 },
   );
 
+  const checks = {
+    canonicalPackageValidation: "PASS",
+    parserContractFixtures: "PASS",
+    pinnedIndependentUpstreamValidation: "PASS",
+    validatorRegressionTests: "PASS",
+    generatedCatalogUntracked: "PASS",
+    generatedResidueNeutralized: "PASS",
+    generation: "PASS",
+    freshness: "PASS",
+    deterministicGeneration: "PASS",
+    repeatedGenerationByteIdentity: "PASS",
+    canonicalProjectionConformance: "PASS",
+    generatedProjectionConsumerIdentity: "PASS",
+    workerProtocolTests: "PASS",
+    malformedAndResourceBoundaryTests: "PASS",
+    wranglerBuildDryRun: "PASS",
+  };
+  if (mode.frozen) checks.historicalR1ArtifactIdentity = "PASS";
+
   const report = {
     status: "PASS",
-    qualificationCommand: "npm run check",
+    claim: "STRUCTURAL_PROJECTION_CONFORMANCE",
+    qualificationCommand: mode.frozen ? "npm run qualify:r1:frozen" : "npm run qualify:r1",
     source: gitIdentity(),
     pluginVersion: manifest.version,
     skillCount: skillNames.length,
@@ -294,31 +389,18 @@ function main() {
     build: buildIdentity(wranglerBin),
     resourceEnvelope: totals,
     upstreamSpecValidation,
-    frozenR1Contract: {
-      status: "PASS",
-      fixture: "tests/fixtures/r1-qualified-contract.json",
-      provenance: frozenContract.provenance,
-    },
     deploymentIdentity: "NOT_USED",
-    checks: {
-      canonicalPackageValidation: "PASS",
-      parserContractFixtures: "PASS",
-      pinnedIndependentUpstreamValidation: "PASS",
-      validatorRegressionTests: "PASS",
-      generation: "PASS",
-      freshness: "PASS",
-      deterministicGeneration: "PASS",
-      frozenContract: "PASS",
-      canonicalProjectionConformance: "PASS",
-      workerProtocolTests: "PASS",
-      malformedAndResourceBoundaryTests: "PASS",
-      wranglerBuildDryRun: "PASS",
-    },
+    checks,
   };
+  if (historicalR1ArtifactIdentity) {
+    report.historicalR1ArtifactIdentity = historicalR1ArtifactIdentity;
+  }
 
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

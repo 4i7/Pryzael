@@ -264,6 +264,20 @@ The following rules deserve hard-invariant status because they protect correctne
 
 **Observable evaluation:** gate definition and admission evidence remain visible; changed gates have an explicit rationale and requalification.
 
+#### 5.8.1 Explicit R1 qualification-gate supersession
+
+R1 historical artifact identity, reusable current-source conformance, and current semantic-mutation authority are separate claims. The previous normal HEAD gate incorrectly treated the historical R1 exact-artifact oracle as a permanent semantic-byte equality requirement. This is explicitly superseded rather than silently weakened.
+
+- `npm run qualify:r1:frozen` qualifies **historical R1 artifact identity**. It composes current reusable conformance with the unchanged frozen R1 oracle and is expected to fail once an explicitly authorized later semantic phase legitimately changes canonical Skill bytes.
+- `npm run qualify:r1` qualifies **reusable structural/projection conformance** of the current canonical packages and their generated/runtime projection. It preserves canonical package validation, shared parser/normalizer use, source-to-projection semantic/resource parity, deterministic generation, generated-catalog freshness, pinned upstream validation, dependency establishment, Worker tests, and build dry-run checks without claiming historical byte identity.
+- `npm run qualify:head-authority` qualifies **current semantic-mutation authority**. Its machine-readable process authority is `qualification/head-semantic-authority.json`; it compares Git tree/package identity and does not interpret Skill prose or become Skill semantic authority.
+
+Normal `npm run check` preserves correctness-critical ordering by running HEAD semantic-mutation authority first, reusable R1 conformance second, and the frozen R4 Lab qualification third. No PASS substitutes for another.
+
+Canonical Skill semantics remain authored only under `skills/<name>/`. The HEAD authority file may identify which canonical package subtree is presently admitted to change, but it contains no Skill-body semantics and creates no second authored semantic authority. Future phase advancement must explicitly update authority data rather than adding package-specific qualification logic.
+
+This supersession does not redefine the frozen R4C `CURRENT_PRYZAEL` comparator, does not change R4 evaluation semantics, and does not itself qualify, admit, or merge an R5 candidate.
+
 ### 5.9 No Second Authored Semantic Authority
 
 **Prevents:** a registry, schema, generated file, protocol document, or Worker source from becoming a second manually maintained database of Skill-local meaning.

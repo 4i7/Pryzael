@@ -4,57 +4,21 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { ordinalCompare } from "../scripts/r1_qualification_invariants.mjs";
 import {
-  assertFrozenR1Contract,
-  canonicalPackageIdentity,
-  catalogFileIdentity,
-  ordinalCompare,
-} from "../scripts/r1_qualification_invariants.mjs";
+  parseCanonicalSkillMarkdown,
+  projectCanonicalSkill,
+} from "../scripts/skill_package.mjs";
 import { CATALOG, PRYZAEL_VERSION } from "../worker/generated/catalog.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKILLS_DIR = path.join(ROOT, "skills");
 const PLUGIN_MANIFEST = path.join(ROOT, ".codex-plugin", "plugin.json");
-const CATALOG_PATH = path.join(ROOT, "worker", "generated", "catalog.mjs");
-const FROZEN_CONTRACT = JSON.parse(
-  fs.readFileSync(path.join(ROOT, "tests", "fixtures", "r1-qualified-contract.json"), "utf8"),
-);
 const RESOURCE_ROOTS = ["references", "assets", "scripts"];
 const TEXT_EXTENSIONS = new Set([
   ".md", ".txt", ".tsv", ".csv", ".json", ".yaml", ".yml", ".toml",
   ".ini", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
 ]);
-
-function parseScalar(raw) {
-  const value = raw.trim();
-  if (value.startsWith('"') && value.endsWith('"')) return JSON.parse(value);
-  if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1).replace(/''/g, "'");
-  return value;
-}
-
-function readCanonicalSkill(directoryName) {
-  const skillDir = path.join(SKILLS_DIR, directoryName);
-  const markdown = fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8").replace(/\r\n/g, "\n");
-  assert.ok(markdown.startsWith("---\n"), `${directoryName}: missing YAML frontmatter`);
-  const end = markdown.indexOf("\n---\n", 4);
-  assert.notEqual(end, -1, `${directoryName}: unterminated YAML frontmatter`);
-
-  const metadata = {};
-  for (const line of markdown.slice(4, end).split("\n")) {
-    if (/^\s/.test(line)) continue;
-    const separator = line.indexOf(":");
-    if (separator === -1) continue;
-    const key = line.slice(0, separator).trim();
-    if (key === "name" || key === "description") metadata[key] = parseScalar(line.slice(separator + 1));
-  }
-
-  return {
-    name: metadata.name,
-    description: metadata.description,
-    body: markdown.slice(end + 5).trim(),
-    resources: collectCanonicalResources(skillDir),
-  };
-}
 
 function collectCanonicalResources(skillDir) {
   const resources = {};
@@ -80,11 +44,27 @@ function collectCanonicalResources(skillDir) {
   return Object.fromEntries(Object.entries(resources).sort(([a], [b]) => ordinalCompare(a, b)));
 }
 
+function readCanonicalSkill(directoryName) {
+  const skillDir = path.join(SKILLS_DIR, directoryName);
+  const markdown = fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8");
+  const parsed = parseCanonicalSkillMarkdown(markdown);
+  assert.deepEqual(parsed.errors, [], `${directoryName}: shared parser rejected canonical Skill`);
+  const projected = projectCanonicalSkill(parsed, directoryName);
+  return {
+    ...projected,
+    resources: collectCanonicalResources(skillDir),
+  };
+}
+
 function skillDirectories() {
   return fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort(ordinalCompare);
+}
+
+function titleForSkill(name) {
+  return name.split("-").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
 }
 
 test("plugin manifest and generated version stay aligned", () => {
@@ -96,7 +76,7 @@ test("plugin manifest and generated version stay aligned", () => {
   assert.equal(PRYZAEL_VERSION, manifest.version);
 });
 
-test("every top-level Skill is projected exactly once with canonical description and body", () => {
+test("every current top-level Skill is projected exactly once with canonical semantics and derived identity", () => {
   const directories = skillDirectories();
   assert.ok(directories.length > 0);
   assert.equal(CATALOG.length, directories.length);
@@ -113,6 +93,7 @@ test("every top-level Skill is projected exactly once with canonical description
 
     const expectedToolName = directoryName.replace(/-/g, "_");
     assert.equal(projected.toolName, expectedToolName, `${directoryName}: tool-name drift`);
+    assert.equal(projected.title, titleForSkill(directoryName), `${directoryName}: title drift`);
     assert.ok(!toolNames.has(expectedToolName), `${directoryName}: duplicate tool name ${expectedToolName}`);
     toolNames.add(expectedToolName);
   }
@@ -146,23 +127,4 @@ test("current resource envelope is characterized without imposing a new size lim
   const totalBytes = resources.reduce((sum, item) => sum + item.bytes, 0);
   const maxBytes = resources.reduce((max, item) => Math.max(max, item.bytes), 0);
   assert.ok(totalBytes >= maxBytes);
-});
-
-test("canonical packages and generated projection match the frozen R1 qualification contract", () => {
-  const manifest = JSON.parse(fs.readFileSync(PLUGIN_MANIFEST, "utf8"));
-  const names = skillDirectories();
-  const packageIdentities = Object.fromEntries(
-    names.map((name) => [name, canonicalPackageIdentity(path.join(SKILLS_DIR, name))]),
-  );
-
-  assert.equal(
-    assertFrozenR1Contract({
-      fixture: FROZEN_CONTRACT,
-      pluginVersion: manifest.version,
-      skillNames: names,
-      packageIdentities,
-      catalogIdentity: catalogFileIdentity(CATALOG_PATH),
-    }),
-    true,
-  );
 });

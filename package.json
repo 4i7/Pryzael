@@ -6,11 +6,13 @@
     "generate:mcp-catalog": "node scripts/generate_mcp_catalog.mjs",
     "validate:skills": "node scripts/validate_skills.mjs",
     "test:conformance": "node --test tests/skill-package-contract.test.mjs tests/structural-conformance.test.mjs worker/index.test.mjs",
+    "qualify:head-authority": "node scripts/qualify_head_semantic_authority.mjs",
     "qualify:r1": "node scripts/qualify_r1.mjs",
+    "qualify:r1:frozen": "node scripts/qualify_r1.mjs --frozen",
     "qualify:r4-lab": "node scripts/validate_r4_lab.mjs && node --test tests/r4-lab.test.mjs tests/r4-lab-comparison-completeness.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "npm run qualify:r1 && npm run qualify:r4-lab"
+    "check": "npm run qualify:head-authority && npm run qualify:r1 && npm run qualify:r4-lab"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
