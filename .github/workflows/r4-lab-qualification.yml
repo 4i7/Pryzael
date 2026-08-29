@@ -7,7 +7,7 @@ on:
       - "docs/EVALUATION.md"
       - "scripts/r4_lab*.mjs"
       - "scripts/validate_r4_lab.mjs"
-      - "tests/r4-lab.test.mjs"
+      - "tests/r4-lab*.test.mjs"
       - "package.json"
       - ".github/workflows/r4-lab-qualification.yml"
   workflow_dispatch:
