@@ -1,0 +1,41 @@
+name: PR10 frozen R1 evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/pr10-frozen-r1-evidence.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-r1:
+    runs-on: ubuntu-latest
+    env:
+      COMPOSITION_SHA: 330f581d37c84524d0ad30b895af91129559216f
+      COMPOSITION_TREE: 51bd093e73068368f3bae3a98d5d20fab3f803c6
+    steps:
+      - name: Checkout exact composition artifact
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.COMPOSITION_SHA }}
+          fetch-depth: 0
+
+      - name: Prove exact composition identity
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$COMPOSITION_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$COMPOSITION_TREE"
+          printf 'tested_sha=%s\n' "$(git rev-parse HEAD)"
+          printf 'tested_tree=%s\n' "$(git rev-parse HEAD^{tree})"
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Install exact lockfile dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run direct historical frozen R1
+        run: npm run qualify:r1:frozen
