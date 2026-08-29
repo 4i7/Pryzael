@@ -27,13 +27,14 @@ Preserve at least:
 
 ### Individual Skill package
 
-A copied `skills/<name>/` package should retain:
+A standalone distribution of `skills/<name>/` contains both adapted upstream material and Pryzael-authored modifications. The distribution should therefore carry both license layers:
 
-- `SKILL.md`;
-- any package-local `references/`, `assets/`, or `scripts/` files that are part of the package;
-- `LICENSE.pstack.txt`.
+- include a copy of the repository-root Pryzael `LICENSE` with the standalone distribution;
+- retain the package's `LICENSE.pstack.txt` upstream notice;
+- retain `SKILL.md`;
+- retain any package-local `references/`, `assets/`, or `scripts/` files that are part of the distributed package.
 
-If Pryzael-authored additions from outside that Skill directory are bundled with the package, also include the root Pryzael MIT license.
+The root license does not need to become canonical Skill semantic material and should not be inserted into the Skill workflow body or MCP model-visible resource set solely for licensing purposes. It only needs to accompany the redistributed package so the Pryzael-authored license terms remain available outside the repository root.
 
 ### Remote MCP deployment
 
