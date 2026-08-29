@@ -7,7 +7,7 @@
     "validate:skills": "node scripts/validate_skills.mjs",
     "test:conformance": "node --test tests/skill-package-contract.test.mjs tests/structural-conformance.test.mjs worker/index.test.mjs",
     "qualify:r1": "node scripts/qualify_r1.mjs",
-    "qualify:r4-lab": "node scripts/validate_r4_lab.mjs && node --test tests/r4-lab.test.mjs",
+    "qualify:r4-lab": "node scripts/validate_r4_lab.mjs && node --test tests/r4-lab.test.mjs tests/r4-lab-comparison-completeness.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check": "npm run qualify:r1 && npm run qualify:r4-lab"
