@@ -65,6 +65,18 @@ function runGit(cwd, args) {
   return result.stdout.trim();
 }
 
+function currentPackageTrees(cwd) {
+  const entries = runGit(cwd, ["ls-tree", "HEAD:skills"])
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^040000 tree ([0-9a-f]{40})\t(.+)$/);
+      assert.ok(match, `unexpected synthetic Skill tree entry: ${line}`);
+      return [match[2], match[1]];
+    });
+  return Object.fromEntries(entries);
+}
+
 function skillMarkdown(name, body = "Original fixture body.") {
   return `---\nname: ${name}\ndescription: "${name} fixture."\n---\n\n${body}\n`;
 }
@@ -89,12 +101,14 @@ function withAuthorityRepo(callback) {
     commitAll(root, "baseline");
 
     const baselineCanonicalSkillTree = runGit(root, ["rev-parse", "HEAD:skills"]);
+    const baselineCanonicalPackageTrees = currentPackageTrees(root);
     const authority = {
       schemaVersion: 1,
       baselineCanonicalSkillTree,
+      baselineCanonicalPackageTrees,
       admittedCanonicalPackages: ["architect"],
     };
-    return callback({ root, authority, baselineCanonicalSkillTree });
+    return callback({ root, authority, baselineCanonicalSkillTree, baselineCanonicalPackageTrees });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -178,33 +192,39 @@ test("historical R1 oracle rejects generated projection drift", () => {
 });
 
 test("HEAD semantic authority data is generic, deterministic, and package-scoped", () => {
-  assert.deepEqual(
-    validateHeadSemanticAuthority({
-      schemaVersion: 1,
-      baselineCanonicalSkillTree: "1".repeat(40),
-      admittedCanonicalPackages: ["architect"],
-    }),
-    {
-      schemaVersion: 1,
-      baselineCanonicalSkillTree: "1".repeat(40),
-      admittedCanonicalPackages: ["architect"],
+  const input = {
+    schemaVersion: 1,
+    baselineCanonicalSkillTree: "1".repeat(40),
+    baselineCanonicalPackageTrees: {
+      architect: "2".repeat(40),
     },
-  );
+    admittedCanonicalPackages: ["architect"],
+  };
+  assert.deepEqual(validateHeadSemanticAuthority(input), input);
+
   assert.throws(
     () => validateHeadSemanticAuthority({
-      schemaVersion: 1,
-      baselineCanonicalSkillTree: "1".repeat(40),
+      ...input,
       admittedCanonicalPackages: ["prove-it-works", "architect"],
     }),
     /deterministic ordinal ordering/,
   );
   assert.throws(
     () => validateHeadSemanticAuthority({
-      schemaVersion: 1,
-      baselineCanonicalSkillTree: "1".repeat(40),
+      ...input,
       admittedCanonicalPackages: ["skills\/architect"],
     }),
     /invalid admitted canonical package name/,
+  );
+  assert.throws(
+    () => validateHeadSemanticAuthority({
+      ...input,
+      baselineCanonicalPackageTrees: {
+        "prove-it-works": "3".repeat(40),
+        architect: "2".repeat(40),
+      },
+    }),
+    /baselineCanonicalPackageTrees must use deterministic ordinal ordering/,
   );
 });
 
@@ -236,7 +256,6 @@ test("admitted architect resource mutation is authorized at package-subtree gran
 
     const report = qualifyHeadSemanticAuthority({ cwd: root, authority });
     assert.deepEqual(report.changedCanonicalPackages, ["architect"]);
-    assert.ok(report.changedCanonicalPaths.includes("architect/references/fixture.md"));
   });
 });
 
@@ -275,6 +294,17 @@ test("top-level Skill additions, deletions, and renames fail closed unless the a
     commitAll(root, "rename skill");
     assert.throws(() => qualifyHeadSemanticAuthority({ cwd: root, authority }), /architect-next/);
   }));
+});
+
+test("baseline package identities are self-checked when the canonical Skill tree is unchanged", () => {
+  withAuthorityRepo(({ root, authority }) => {
+    const corrupted = structuredClone(authority);
+    corrupted.baselineCanonicalPackageTrees.architect = "0".repeat(40);
+    assert.throws(
+      () => qualifyHeadSemanticAuthority({ cwd: root, authority: corrupted }),
+      /do not reconstruct the baseline canonical Skill tree contents/,
+    );
+  });
 });
 
 test("projection freshness accepts regenerated current bytes and rejects stale projection", () => {
