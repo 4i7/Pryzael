@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/4i7/Pryzael/evaluation/qualification-packet.schema.json",
+  "title": "Pryzael hidden R4 qualification packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "qualification_set_id",
+    "tasks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "r4-qualification-packet-v1"
+    },
+    "qualification_set_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "task_id",
+          "partition",
+          "family",
+          "risk",
+          "prompt",
+          "observable_success_predicates",
+          "critical_failure_predicates",
+          "metric_applicability",
+          "digest"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "partition": {
+            "const": "QUALIFICATION"
+          },
+          "family": {
+            "type": "string",
+            "minLength": 1
+          },
+          "risk": {
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 40
+          },
+          "observable_success_predicates": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "kind",
+                "statement"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "enum": [
+                    "OBJECTIVE",
+                    "SUBJECTIVE"
+                  ]
+                },
+                "statement": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "critical_failure_predicates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "kind",
+                "statement"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "enum": [
+                    "OBJECTIVE",
+                    "SUBJECTIVE"
+                  ]
+                },
+                "statement": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "metric_applicability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "FALSE_VERIFIED",
+              "INCONCLUSIVE_HANDLING",
+              "EVIDENCE_ADEQUACY",
+              "PREMATURE_CONVERGENCE",
+              "PATH_OVERCONSTRAINT",
+              "SOLUTION_CLASS_COLLAPSE",
+              "REPLANNING_COMPETENCE"
+            ],
+            "properties": {
+              "FALSE_VERIFIED": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "INCONCLUSIVE_HANDLING": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "EVIDENCE_ADEQUACY": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "PREMATURE_CONVERGENCE": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "PATH_OVERCONSTRAINT": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "SOLUTION_CLASS_COLLAPSE": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              },
+              "REPLANNING_COMPETENCE": {
+                "enum": [
+                  "APPLICABLE",
+                  "NOT_APPLICABLE"
+                ]
+              }
+            }
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "replanning_event": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "prior_plan_or_assumption",
+              "new_evidence",
+              "material_invalidation_required"
+            ],
+            "properties": {
+              "prior_plan_or_assumption": {
+                "type": "string",
+                "minLength": 1
+              },
+              "new_evidence": {
+                "type": "string",
+                "minLength": 1
+              },
+              "material_invalidation_required": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

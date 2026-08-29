@@ -1,0 +1,39 @@
+name: R4 behavioral lab qualification
+
+on:
+  pull_request:
+    paths:
+      - "evaluation/**"
+      - "docs/EVALUATION.md"
+      - "scripts/r4_lab*.mjs"
+      - "scripts/validate_r4_lab.mjs"
+      - "tests/r4-lab*.test.mjs"
+      - "package.json"
+      - ".github/workflows/r4-lab-qualification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+
+      - name: Prove exact candidate checkout
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run full qualification chain
+        run: npm run check

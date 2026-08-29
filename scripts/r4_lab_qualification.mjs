@@ -1,0 +1,260 @@
+import fs from "node:fs";
+import path from "node:path";
+import {
+  EVAL, FORBIDDEN_PROMPT_TEXT, HEX64, ROOT, SECRET_COMMITMENT_KEYS,
+  assertExactKeys, assertObject, expandRoutingCases, publicProtocolIdentity,
+  readBytes, readJson, sha256, taskDigest, validateContract,
+  validateDevelopmentCorpus, validateManifest, validateTaskMetricApplicability,
+} from "./r4_lab_core.mjs";
+
+function walkKeys(value, callback) {
+  if (Array.isArray(value)) {
+    for (const item of value) walkKeys(item, callback);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, item] of Object.entries(value)) {
+    callback(key, item);
+    walkKeys(item, callback);
+  }
+}
+
+function validatePredicates(task) {
+  const predicateIds = new Set();
+  for (const [role, predicates] of [
+    ["SUCCESS", task.observable_success_predicates],
+    ["CRITICAL", task.critical_failure_predicates ?? []],
+  ]) {
+    if (role === "SUCCESS" && (!Array.isArray(predicates) || predicates.length === 0)) {
+      throw new Error(`${task.task_id}: qualification task missing success predicates`);
+    }
+    for (const predicate of predicates ?? []) {
+      if (!predicate.id || predicateIds.has(predicate.id)) {
+        throw new Error(`${task.task_id}: duplicate/missing predicate id`);
+      }
+      predicateIds.add(predicate.id);
+      if (!["OBJECTIVE", "SUBJECTIVE"].includes(predicate.kind)) {
+        throw new Error(`${task.task_id}:${predicate.id}: invalid predicate kind`);
+      }
+      if (!predicate.statement || FORBIDDEN_PROMPT_TEXT.test(predicate.statement)) {
+        throw new Error(`${task.task_id}:${predicate.id}: qualification predicate leaks condition/protocol vocabulary`);
+      }
+    }
+  }
+}
+
+export function validateQualificationCommitment(commitment, contract = readJson("evaluation/contract.json")) {
+  assertObject(commitment, "qualification commitment");
+  if (commitment.schema_version !== "r4-qualification-commitment-v1" ||
+      commitment.status !== "FROZEN_BEFORE_BASELINE") {
+    throw new Error("qualification commitment must be frozen before baseline");
+  }
+  if (!HEX64.test(commitment.packet_sha256 ?? "")) {
+    throw new Error("qualification commitment packet digest is invalid");
+  }
+  if (!Number.isInteger(commitment.packet_bytes) || commitment.packet_bytes < 1) {
+    throw new Error("qualification commitment packet byte count is invalid");
+  }
+  if (!Array.isArray(commitment.task_index) || commitment.task_index.length !== commitment.task_count) {
+    throw new Error("qualification commitment task count mismatch");
+  }
+  if (commitment.task_count < contract.qualification_packet.minimum_task_count) {
+    throw new Error("qualification commitment has insufficient task count");
+  }
+  const taskIds = new Set();
+  const families = new Set();
+  for (const item of commitment.task_index) {
+    assertExactKeys(
+      item,
+      ["task_id", "family", "task_digest"],
+      ["task_id", "family", "task_digest"],
+      "qualification commitment task index",
+    );
+    if (taskIds.has(item.task_id)) {
+      throw new Error(`qualification commitment duplicate task id: ${item.task_id}`);
+    }
+    taskIds.add(item.task_id);
+    families.add(item.family);
+    if (!HEX64.test(item.task_digest)) {
+      throw new Error(`${item.task_id}: qualification task digest invalid`);
+    }
+  }
+  for (const family of contract.qualification_packet.required_families) {
+    if (!families.has(family)) {
+      throw new Error(`qualification commitment missing required family: ${family}`);
+    }
+  }
+  walkKeys(commitment, (key) => {
+    if (SECRET_COMMITMENT_KEYS.has(key)) {
+      throw new Error(`qualification commitment leaks hidden field: ${key}`);
+    }
+  });
+  return true;
+}
+
+export function validateQualificationPacket(packet, contract = readJson("evaluation/contract.json")) {
+  if (packet.schema_version !== contract.qualification_packet.schema_version) {
+    throw new Error("qualification packet schema mismatch");
+  }
+  if (!packet.qualification_set_id) throw new Error("qualification packet id missing");
+  if (!Array.isArray(packet.tasks) ||
+      packet.tasks.length < contract.qualification_packet.minimum_task_count) {
+    throw new Error("qualification packet has insufficient tasks");
+  }
+  const seen = new Set();
+  const families = new Set();
+  for (const task of packet.tasks) {
+    const required = [
+      "task_id", "partition", "family", "risk", "prompt",
+      "observable_success_predicates", "critical_failure_predicates",
+      "metric_applicability", "digest",
+    ];
+    const allowed = [...required, "replanning_event"];
+    assertExactKeys(task, required, allowed, task.task_id ?? "qualification task");
+    if (task.partition !== "QUALIFICATION") {
+      throw new Error(`${task.task_id}: hidden packet task partition mismatch`);
+    }
+    if (!/^QLF-[A-Z0-9-]+$/.test(task.task_id)) {
+      throw new Error(`${task.task_id}: invalid qualification task id`);
+    }
+    if (seen.has(task.task_id)) throw new Error(`${task.task_id}: duplicate qualification task id`);
+    seen.add(task.task_id);
+    families.add(task.family);
+    if (typeof task.prompt !== "string" || task.prompt.trim().length < 40) {
+      throw new Error(`${task.task_id}: qualification prompt incomplete`);
+    }
+    if (FORBIDDEN_PROMPT_TEXT.test(task.prompt)) {
+      throw new Error(`${task.task_id}: qualification prompt leaks condition/protocol vocabulary`);
+    }
+    validatePredicates(task);
+    validateTaskMetricApplicability(task, contract);
+    if (task.digest !== taskDigest(task)) {
+      throw new Error(`${task.task_id}: qualification task digest mismatch`);
+    }
+  }
+  for (const family of contract.qualification_packet.required_families) {
+    if (!families.has(family)) {
+      throw new Error(`qualification packet missing required family: ${family}`);
+    }
+  }
+  return true;
+}
+
+export function loadQualificationAuthority(
+  packetBytes,
+  commitmentBytes,
+  contract = readJson("evaluation/contract.json"),
+) {
+  if (!(Buffer.isBuffer(packetBytes) || typeof packetBytes === "string")) {
+    throw new Error("qualification packet must be supplied as exact bytes");
+  }
+  if (!(Buffer.isBuffer(commitmentBytes) || typeof commitmentBytes === "string")) {
+    throw new Error("qualification commitment must be supplied as exact bytes");
+  }
+  const packetBuffer = Buffer.isBuffer(packetBytes) ? packetBytes : Buffer.from(packetBytes);
+  const commitmentBuffer = Buffer.isBuffer(commitmentBytes) ?
+    commitmentBytes : Buffer.from(commitmentBytes);
+  const packet = JSON.parse(packetBuffer.toString("utf8"));
+  const commitment = JSON.parse(commitmentBuffer.toString("utf8"));
+  validateQualificationCommitment(commitment, contract);
+  validateQualificationPacket(packet, contract);
+  if (sha256(packetBuffer) !== commitment.packet_sha256 ||
+      packetBuffer.length !== commitment.packet_bytes) {
+    throw new Error("hidden qualification packet does not match public commitment");
+  }
+  if (packet.qualification_set_id !== commitment.qualification_set_id) {
+    throw new Error("qualification set id mismatch");
+  }
+  if (packet.tasks.length !== commitment.task_count) {
+    throw new Error("hidden packet task count does not match commitment");
+  }
+  const committed = new Map(commitment.task_index.map((item) => [item.task_id, item]));
+  for (const task of packet.tasks) {
+    const index = committed.get(task.task_id);
+    if (!index || index.family !== task.family || index.task_digest !== task.digest) {
+      throw new Error(`${task.task_id}: hidden task identity does not match public commitment`);
+    }
+  }
+  return {
+    packet,
+    commitment,
+    packetBytes: packetBuffer,
+    commitmentBytes: commitmentBuffer,
+    packetSha256: sha256(packetBuffer),
+    commitmentSha256: sha256(commitmentBuffer),
+    tasks: new Map(packet.tasks.map((task) => [task.task_id, task])),
+  };
+}
+
+export function validateDevelopmentIsolation({
+  contract = readJson("evaluation/contract.json"),
+  manifest = readJson("evaluation/frozen-manifest.json"),
+  visiblePaths = fs.readdirSync(EVAL, {recursive: true})
+    .map((relative) => `evaluation/${String(relative).replaceAll("\\", "/")}`),
+} = {}) {
+  if (contract.authority_boundary.hidden_qualification_payload_repository_visible !== false ||
+      contract.authority_boundary.hidden_packet_repository_path !== null ||
+      manifest.held_out_development_isolation?.repository_visible_payload_allowed !== false) {
+    throw new Error("held-out development isolation declaration is not fail-closed");
+  }
+  const forbidden = [
+    "evaluation/corpus/held-out.json",
+    "evaluation/qualification-packet.json",
+    "evaluation/hidden-qualification-packet.json",
+  ];
+  for (const relative of forbidden) {
+    if (visiblePaths.includes(relative)) {
+      throw new Error(`${relative}: repository-visible qualification payload violates development isolation`);
+    }
+  }
+  const commitmentPath = contract.authority_boundary.qualification_commitment_path;
+  if (visiblePaths.includes(commitmentPath) && fs.existsSync(path.join(ROOT, commitmentPath))) {
+    validateQualificationCommitment(readJson(commitmentPath), contract);
+  }
+  return true;
+}
+
+export function buildPublicAuthority() {
+  const contractBytes = readBytes("evaluation/contract.json");
+  const manifestBytes = readBytes("evaluation/frozen-manifest.json");
+  const contract = JSON.parse(contractBytes.toString("utf8"));
+  const manifest = JSON.parse(manifestBytes.toString("utf8"));
+  const development = readJson("evaluation/corpus/development.json");
+  const routing = readJson("evaluation/routing-cases.json");
+  validateContract(contract);
+  validateManifest(manifest);
+  validateDevelopmentIsolation({contract, manifest});
+  const developmentTasks = validateDevelopmentCorpus(development, contract);
+  const routingCases = expandRoutingCases(routing);
+  const identity = {
+    contract_id: contract.contract_id,
+    contract_sha256: sha256(contractBytes),
+    public_manifest_id: manifest.manifest_id,
+    public_manifest_sha256: sha256(manifestBytes),
+    protocol_revision: publicProtocolIdentity(contract),
+  };
+  return {
+    contract,
+    manifest,
+    identity,
+    developmentTasks,
+    routingCases: new Map(routingCases.map((item) => [item.case_id, item])),
+  };
+}
+
+export function buildEvaluationAuthority({
+  qualificationPacketBytes = null,
+  qualificationCommitmentBytes = null,
+} = {}) {
+  const authority = buildPublicAuthority();
+  if ((qualificationPacketBytes === null) !== (qualificationCommitmentBytes === null)) {
+    throw new Error("qualification packet and commitment must be supplied together");
+  }
+  authority.qualification = qualificationPacketBytes !== null ?
+    loadQualificationAuthority(
+      qualificationPacketBytes,
+      qualificationCommitmentBytes,
+      authority.contract,
+    ) : null;
+  return authority;
+}
