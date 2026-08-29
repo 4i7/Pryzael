@@ -269,3 +269,37 @@ Individual Skills may still be uploaded/installed on ChatGPT surfaces that suppo
 ### Remote MCP path
 
 Cloudflare Workers Builds connects to the GitHub repository, runs the generator during Wrangler's custom build, and deploys the Worker to a `workers.dev` hostname. Stable production should follow `main`; feature branches are qualification candidates until merged.
+
+The ChatGPT developer Plugin connection uses the resulting:
+
+```text
+https://<actual-worker-hostname>/mcp
+```
+
+### Authentication
+
+The current endpoint is unauthenticated because the Worker serves only public repository workflow text and performs no external action. If future capabilities introduce private data or writes, reassess OAuth/authorization before exposing them.
+
+See `docs/OPERATIONS.md` for the current application-log boundary, observability configuration, sampling policy, and evidence threshold for adding rate limiting or revisiting authentication.
+
+## 16. Infrastructure decision
+
+The MCP architecture intentionally introduces one hosted runtime authority: a stateless Cloudflare Worker.
+
+Allowed runtime:
+
+```text
+Cloudflare Workers
+  -> stateless /mcp
+  -> generated public Pryzael workflow catalog
+```
+
+Still excluded unless future evidence requires them: local always-on processes/tunnels, duplicate hosts, Durable Objects/stateful MCP sessions, KV/D1/R2/Queues/databases, GitHub Actions as runtime, Pryzael model/API calls, or connector credential proxying.
+
+Cloudflare plan limits remain external product constraints. Pryzael does not claim that those services are unlimited.
+
+## 17. Non-goals
+
+Pryzael is not a durable workflow/transaction engine, GitHub proxy, autonomous background service, promise that subagents/browser control exist, replacement for tests/CI, guarantee every ChatGPT surface can call unpublished MCP plugins, or guarantee of unlimited ChatGPT/Cloudflare usage.
+
+It is a portable engineering workflow layer with native Skill and remote MCP projections from one canonical source.
