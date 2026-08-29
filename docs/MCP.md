@@ -124,6 +124,8 @@ Do not guess either hostname before Cloudflare displays it.
 
 The current endpoint is unauthenticated because it serves only public Pryzael workflow text and performs no mutation or external action. Add OAuth or another supported authorization layer only if private data/write capabilities or the deployment threat model require it.
 
+See [`OPERATIONS.md`](OPERATIONS.md) for the current application-log boundary, Cloudflare observability configuration, sampling policy, and the evidence threshold for adding rate limiting or revisiting authentication.
+
 ## Free-plan boundary
 
 Cloudflare product limits are external to Pryzael. The Worker is intentionally stateless and performs no network/database subrequests, so ordinary personal interactive use should remain far below the request allowance. The build-time catalog also avoids filesystem parsing or dynamic Skill discovery during each request.
