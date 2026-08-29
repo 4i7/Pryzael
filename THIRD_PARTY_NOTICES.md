@@ -1,12 +1,22 @@
 # Third-party notices
 
+## Repository license relationship
+
+Pryzael-authored source code and documentation are licensed under the repository-root [`LICENSE`](LICENSE) unless a file states otherwise.
+
+This file records third-party provenance and copyright notices. The root Pryzael license does not erase or replace third-party attribution. When redistributing adapted Skill material, preserve the applicable upstream notice as well as the Pryzael license for Pryzael-authored portions.
+
+Each independently distributable Skill package also carries `LICENSE.pstack.txt` so the upstream pstack notice remains present when that package is copied or uploaded separately from the repository root.
+
+See [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for the distribution boundary.
+
 ## pstack
 
-Selected Pryzael skill materials are adapted from the `pstack` plugin in `cursor/plugins`:
+Selected Pryzael Skill materials are adapted from the `pstack` plugin in `cursor/plugins`:
 
 https://github.com/cursor/plugins/tree/main/pstack
 
-Source license:
+Upstream source license:
 
 ```text
 MIT License
@@ -32,4 +42,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-The Pryzael versions generalize Cursor-specific mechanisms for WebChatGPT use and may diverge from upstream behavior.
+Pryzael generalizes and adapts selected Cursor-specific procedures for ChatGPT, Codex, Agent Skills, and MCP-compatible hosts and may diverge from upstream behavior. Upstream provenance is therefore not current Pryzael workflow authority.

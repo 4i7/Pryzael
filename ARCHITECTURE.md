@@ -215,24 +215,32 @@ Pryzael uses GitHub operation semantics rather than hard-coded host-internal too
 
 `show-me-your-work` owns decision/evidence trail semantics. The logical fields remain `ts`, `phase`, `decision`, `why`, `evidence`, `result`. Its TSV template is bundled as a package-local MCP resource and remains a native Skill asset.
 
-## 13. Source and licensing
+## 13. Source, licensing, and distribution
 
-Pryzael is adapted from MIT-licensed pstack material. Each Skill carries `LICENSE.pstack.txt` so the upstream notice survives independent export. MCP exposure does not change that provenance boundary.
+Unless a file states otherwise, Pryzael-authored source code and documentation are licensed under the repository-root MIT [`LICENSE`](LICENSE).
+
+Selected Skill material is adapted from MIT-licensed pstack material. Each Skill carries `LICENSE.pstack.txt` so the upstream notice survives independent export, and `THIRD_PARTY_NOTICES.md` records repository-level provenance. The root Pryzael license does not replace third-party attribution.
+
+MCP exposure and generated artifacts do not create a second workflow or licensing authority. See `docs/DISTRIBUTION.md` for the full distribution boundary.
 
 ## 14. Validation
 
 Validation has four layers:
 
 1. upstream Agent Skills validation when available;
-2. `python scripts/validate_skills.py` for Pryzael Skill-package invariants;
-3. generated-catalog, Worker protocol smoke, and Wrangler dry-run bundle validation;
+2. `npm run validate:skills` for Pryzael Skill-package invariants;
+3. generated-catalog, Worker protocol smoke, and Wrangler dry-run bundle validation through repository qualification;
 4. live Cloudflare endpoint and ChatGPT product-surface qualification.
 
-Expected Worker check after dependencies are installed:
+Use package scripts as the contributor-facing command authority instead of documenting validator implementation filenames. This keeps the documented command stable if the implementation changes.
+
+Expected repository check after dependencies are installed:
 
 ```text
 npm run check
 ```
+
+`npm run check` currently runs `qualify:head-authority`, `qualify:r1`, and `qualify:r4-lab` in sequence.
 
 Important invariants:
 
@@ -246,9 +254,13 @@ Important invariants:
 
 Static checks cannot prove that a particular ChatGPT surface will expose or execute the MCP tools. Only observable behavior on that product surface can establish that.
 
+See `docs/DEVELOPMENT.md` for the contributor decision flow and change-class-to-authority mapping.
+
 ## 15. Distribution and deployment
 
 GitHub remains development source of truth. Cloudflare Workers is the live MCP runtime.
+
+Distribution rights, pstack attribution, standalone Skill copying, and generated-artifact boundaries are documented in `docs/DISTRIBUTION.md`.
 
 ### Native Skill path
 
@@ -267,6 +279,8 @@ https://<actual-worker-hostname>/mcp
 ### Authentication
 
 The current endpoint is unauthenticated because the Worker serves only public repository workflow text and performs no external action. If future capabilities introduce private data or writes, reassess OAuth/authorization before exposing them.
+
+See `docs/OPERATIONS.md` for the current application-log boundary, observability configuration, sampling policy, and evidence threshold for adding rate limiting or revisiting authentication.
 
 ## 16. Infrastructure decision
 

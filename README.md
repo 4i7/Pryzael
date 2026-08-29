@@ -82,25 +82,32 @@ The endpoint remains intentionally read-only and unauthenticated while it expose
 
 See [`docs/MCP.md`](docs/MCP.md) for deployment and qualification.
 
-## Validation
+## Development and validation
 
-Agent Skills validation:
+Use package scripts as the command authority. This avoids documentation drift when an underlying validator implementation changes filename or language.
+
+Validate canonical Skill-package invariants:
 
 ```text
-skills-ref validate ./skills/architect
-python scripts/validate_skills.py
+npm run validate:skills
 ```
 
-Cloudflare Worker validation after dependency installation:
+The upstream Agent Skills validator remains part of R1 qualification; it may also be run independently when available, for example against a specific Skill package.
+
+Run the repository qualification chain after dependency installation:
 
 ```text
 npm run check
 ```
 
-`npm run check` regenerates the derived MCP catalog, runs the Worker health/MCP-initialize smoke test, and asks Wrangler for a dry-run bundle. Live qualification still requires a deployed endpoint and user-visible evidence that ChatGPT executed the expected Pryzael action.
+`npm run check` currently runs HEAD semantic-authority qualification, R1 structural qualification, and R4 Lab qualification in sequence. R1 regenerates and verifies the derived MCP catalog, exercises Worker protocol behavior, and performs the Wrangler deployment dry-run. Passing local/static checks still does not prove a live Cloudflare endpoint or ChatGPT product-surface behavior.
 
-## Provenance
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for the contributor decision flow, exact-artifact discipline, and which authority applies to each change class.
 
-These materials are adapted from selected skills in Cursor's `pstack` plugin. Upstream pstack is MIT licensed. Each independently distributable skill folder contains `LICENSE.pstack.txt` so the notice remains present when a skill is copied or uploaded without the repository root.
+## Distribution and provenance
 
-See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for repository-level provenance.
+Unless a file states otherwise, Pryzael-authored source code and documentation are licensed under the MIT License in [`LICENSE`](LICENSE).
+
+Selected Skill materials are adapted from the MIT-licensed Cursor `pstack` plugin. The upstream copyright and MIT notice are preserved in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and in each independently distributable Skill folder as `LICENSE.pstack.txt`.
+
+The root Pryzael license does not replace third-party attribution. See [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for full-repository, standalone-Skill, generated-artifact, and qualification-material distribution boundaries.
