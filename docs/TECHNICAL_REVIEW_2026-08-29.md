@@ -113,7 +113,7 @@ Useful current controls include immutable Action pins, read-only workflow token 
 
 MCP Resources provide URI-addressed context that host applications may expose through UI selection, search, or automatic inclusion.
 
-Reference: https://modelcontextprotocol.io/specification/2025-03-26/server/resources
+Reference: https://modelcontextprotocol.io/specification/2025-11-25/server/resources
 
 **Current Pryzael design:** package-local resources are advertised after Skill selection and fetched through the same Skill tool using an exact resource key.
 
