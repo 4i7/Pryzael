@@ -46,10 +46,28 @@ Qualification tasks own their exact critical predicate IDs. Trial records must o
 
 `evaluateCandidateAdmission()` fail-closes on malformed or incomplete evidence. It enforces exact required N and task/condition/index/mode/surface matrix, missing/duplicate trials, partition and identity consistency, no-Pryzael comparability, critical overrides, authoritative inconclusive handling, total/family task-success non-inferiority, critical/repeated-same-task regressions, autonomy/replanning/ceremony limits, and diagnostic non-authority. Aggregation also rejects mixed partitions, conditioned/automatic modes, native/MCP surfaces, duplicate slots/IDs, and mixed Pryzael artifact identities. Deterministic categorical/count gates are used; no statistical significance is fabricated.
 
-## Contamination guard and later procedure
+## Contamination guard and deferred-baseline sequencing amendment
 
-The frozen authority records `AUTHORITATIVE_BASELINE_MEASURED = false` and `HELD_OUT_RESULTS_OBSERVED = false`. Only synthetic evaluator mechanics/schema/integrity checks are allowed in this repair.
+The frozen authority records `AUTHORITATIVE_BASELINE_MEASURED = false` and `HELD_OUT_RESULTS_OBSERVED = false`. R4C therefore remains **`FROZEN_UNMEASURED`**. This amendment does not claim baseline completion, held-out result observation, candidate qualification, or candidate admission. All existing R4 definitions for the task set, trial counts, applicability, critical predicates, metrics, evidence semantics, condition/surface semantics, comparison completeness, and admission thresholds remain unchanged.
 
-After independent R4 repair review and merge: (A) independent authority creates the hidden packet outside development access; (B) publishes the non-secret commitment before R4C; (C) R4C verifies exact packet bytes and evaluates `NO_PRYZAEL` and `CURRENT_PRYZAEL`; (D) a future R5 candidate is developed without packet access and frozen to exact identity; (E) an independent qualifier evaluates that candidate against the same packet; (F) frozen R4 admission computes the decision. Candidate authors cannot mutate packet or evaluation rules.
+Deferred future R4C `CURRENT_PRYZAEL` is immutably bound to source commit `3bba19e0be936e7b9d3554ac737d32f5cf84c846`, source tree `29c3d97126d0f11de8d5c89dddf21f23d861f257`, and canonical `skills/` tree `4395ef86a309ed610f4860f47284d0e4da572914`. Future or current `main` does **not** redefine `CURRENT_PRYZAEL`; the already-frozen comparator above remains authoritative even if later development branches or PRs exist.
 
-The next admissible action after this repair is **independent R4 repair review only**.
+The frozen qualification packet remains identified by qualification-set ID `pryzael-r4-qualification-cea3a894-v1`, packet schema version `r4-qualification-packet-v1`, packet SHA-256 `892a0c84f1c0adc45bb230efbb5a66cb86150def7ca6fc8fd9d5fcc38381b600`, and byte count `14743`. Resumed development must not regenerate or expose that packet and must not create a replacement qualification set. The same frozen packet remains the authority for later R4C baseline measurement and later candidate qualification.
+
+Before successful R4C completion, the following bounded R5 activities are explicitly allowed: creation of an R5 first-candidate branch, R5 first-candidate semantic development, creation of a public R5 PR, and public/non-hidden code review of that candidate. The first candidate seam remains `architect`; this amendment does not itself start that work.
+
+Pre-R4C R5 development may use only public/non-held-out authority, including public repository state, public R4 protocol/evaluation documentation, the development corpus, ordinary tests, and ordinary engineering evidence. Candidate development must not receive hidden task prompts, hidden predicates, hidden packet content, R4C responses, R4C aggregate outcomes, candidate held-out results, or hidden Judge feedback.
+
+Until R4C successfully completes, R5 hidden packet access is **FORBIDDEN**, R5 hidden qualification is **FORBIDDEN**, R5 candidate admission is **FORBIDDEN**, and R5 merge to `main` is **FORBIDDEN**. Public review cannot substitute for hidden qualification. The existing executable admission authority remains unchanged and fail-closed; incomplete R4C evidence therefore continues to block authoritative candidate admission.
+
+Any R5 candidate intended for later held-out comparison must freeze an immutable candidate commit and tree identity **before** R4C baseline results are disclosed to candidate development. If R4C results become visible to development before that candidate identity is frozen, the affected unfrozen lineage may not later be designated as the pre-result candidate under the existing qualification protocol.
+
+R4C may later resume only against the same frozen hidden packet, the same immutable `CURRENT_PRYZAEL` comparator, valid Subject/Judge isolation, a valid `NO_PRYZAEL` condition, and a valid `CURRENT_PRYZAEL` condition. A pre-existing R5 branch or PR does not alter which `CURRENT_PRYZAEL` artifact is used.
+
+After R4C baseline measurement successfully completes, later R5 candidate qualification must authenticate the same hidden packet, bind the exact frozen candidate commit/tree, evaluate `CANDIDATE_PRYZAEL`, compare it against frozen `CURRENT_PRYZAEL` evidence, and use the existing fail-closed admission authority. This amendment pre-admits no candidate and authorizes no R6, R7, R8, R9, or R10 activity.
+
+No OpenAI API or other paid execution surface is made a prerequisite by this amendment. R4C remains `FROZEN_UNMEASURED` until a separately accepted execution route becomes available or R4C is explicitly reopened.
+
+The previous default sequence was: R4C baseline → R5 development → candidate qualification/admission. The amended deferred-baseline sequence is: R4C frozen/unmeasured → R5 first-candidate development/public review → exact candidate commit/tree freeze → R4C baseline when available → R5 hidden qualification → admission → merge. Hidden-packet independence, result independence, immutable-comparator binding, and fail-closed admission remain mandatory throughout.
+
+The next admissible action after this amendment is **independent process-gate amendment PR review**; R5 implementation is not started by this document change.
