@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "baselineCanonicalSkillTree": "4395ef86a309ed610f4860f47284d0e4da572914",
+  "admittedCanonicalPackages": [
+    "architect"
+  ]
+}

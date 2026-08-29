@@ -5,6 +5,7 @@ on:
     paths:
       - ".codex-plugin/**"
       - "skills/**"
+      - "qualification/**"
       - "scripts/**"
       - "tests/**"
       - "worker/**"
@@ -23,11 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v4
         with:
           ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
 
       - name: Prove exact candidate checkout
         shell: bash
@@ -48,6 +51,23 @@ jobs:
         run: |
           mkdir -p node_modules
           printf 'stale dependency fixture\n' > node_modules/pryzael-r1-stale-marker
+
+      - name: Verify historical R1 oracle for qualification-architecture-only changes
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          if git diff --quiet "$BASE_SHA" "$EXPECTED_SHA" -- skills; then
+            if ! git diff --quiet "$BASE_SHA" "$EXPECTED_SHA" -- \
+              package.json \
+              qualification/head-semantic-authority.json \
+              scripts/qualify_head_semantic_authority.mjs \
+              scripts/qualify_r1.mjs \
+              tests/qualification-gates.test.mjs \
+              tests/structural-conformance.test.mjs \
+              .github/workflows/r1-qualification.yml; then
+              npm run qualify:r1:frozen
+            fi
+          fi
 
       - name: Run standalone fail-closed R1 qualification
         run: npm run check

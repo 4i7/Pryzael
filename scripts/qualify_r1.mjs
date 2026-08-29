@@ -149,10 +149,30 @@ function establishPinnedUpstreamValidation(systemPython, skillNames) {
   };
 }
 
+export function assertCurrentCatalogMatchesGenerated(currentBytes, generatedBytes) {
+  const current = Buffer.isBuffer(currentBytes) ? currentBytes : Buffer.from(currentBytes);
+  const generated = Buffer.isBuffer(generatedBytes) ? generatedBytes : Buffer.from(generatedBytes);
+  if (!current.equals(generated)) {
+    throw new Error("generated MCP catalog is stale or was modified independently of canonical Skill source");
+  }
+  return true;
+}
+
 function deterministicCatalog() {
-  fs.rmSync(path.dirname(CATALOG_PATH), { recursive: true, force: true });
+  if (!fs.existsSync(CATALOG_PATH) || !fs.statSync(CATALOG_PATH).isFile()) {
+    throw new Error("generated MCP catalog is missing from the candidate");
+  }
+
+  const committed = fs.readFileSync(CATALOG_PATH);
   run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
   const first = fs.readFileSync(CATALOG_PATH);
+  try {
+    assertCurrentCatalogMatchesGenerated(committed, first);
+  } catch (error) {
+    fs.writeFileSync(CATALOG_PATH, committed);
+    throw error;
+  }
+
   run(process.execPath, ["scripts/generate_mcp_catalog.mjs"]);
   const second = fs.readFileSync(CATALOG_PATH);
   if (!first.equals(second)) {
@@ -216,7 +236,15 @@ function buildIdentity(wranglerBin) {
   };
 }
 
+function qualificationMode() {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return { frozen: false };
+  if (args.length === 1 && args[0] === "--frozen") return { frozen: true };
+  throw new Error(`unsupported R1 qualification arguments: ${args.join(" ")}`);
+}
+
 function main() {
+  const mode = qualificationMode();
   fs.rmSync(REPORT_PATH, { force: true });
   fs.rmSync(BUILD_OUT, { recursive: true, force: true });
 
@@ -240,17 +268,25 @@ function main() {
       canonicalPackageIdentity(path.join(SKILLS_DIR, skillName)),
     ]),
   );
-  const frozenContract = JSON.parse(fs.readFileSync(FROZEN_CONTRACT_PATH, "utf8"));
-  const skillsTreeGitSha = run("git", ["rev-parse", "HEAD:skills"], { capture: true });
 
-  assertFrozenR1Contract({
-    fixture: frozenContract,
-    pluginVersion: manifest.version,
-    skillNames,
-    packageIdentities: packages,
-    catalogIdentity: catalog,
-    skillsTreeGitSha,
-  });
+  let historicalR1ArtifactIdentity = null;
+  if (mode.frozen) {
+    const frozenContract = JSON.parse(fs.readFileSync(FROZEN_CONTRACT_PATH, "utf8"));
+    const skillsTreeGitSha = run("git", ["rev-parse", "HEAD:skills"], { capture: true });
+    assertFrozenR1Contract({
+      fixture: frozenContract,
+      pluginVersion: manifest.version,
+      skillNames,
+      packageIdentities: packages,
+      catalogIdentity: catalog,
+      skillsTreeGitSha,
+    });
+    historicalR1ArtifactIdentity = {
+      status: "PASS",
+      fixture: "tests/fixtures/r1-qualified-contract.json",
+      provenance: frozenContract.provenance,
+    };
+  }
 
   run(process.execPath, [
     "--test",
@@ -282,9 +318,25 @@ function main() {
     { canonicalBytes: 0, resourceFiles: 0, largestResourceBytes: 0, symlinks: 0 },
   );
 
+  const checks = {
+    canonicalPackageValidation: "PASS",
+    parserContractFixtures: "PASS",
+    pinnedIndependentUpstreamValidation: "PASS",
+    validatorRegressionTests: "PASS",
+    generation: "PASS",
+    freshness: "PASS",
+    deterministicGeneration: "PASS",
+    canonicalProjectionConformance: "PASS",
+    workerProtocolTests: "PASS",
+    malformedAndResourceBoundaryTests: "PASS",
+    wranglerBuildDryRun: "PASS",
+  };
+  if (mode.frozen) checks.historicalR1ArtifactIdentity = "PASS";
+
   const report = {
     status: "PASS",
-    qualificationCommand: "npm run check",
+    claim: "STRUCTURAL_PROJECTION_CONFORMANCE",
+    qualificationCommand: mode.frozen ? "npm run qualify:r1:frozen" : "npm run qualify:r1",
     source: gitIdentity(),
     pluginVersion: manifest.version,
     skillCount: skillNames.length,
@@ -294,31 +346,18 @@ function main() {
     build: buildIdentity(wranglerBin),
     resourceEnvelope: totals,
     upstreamSpecValidation,
-    frozenR1Contract: {
-      status: "PASS",
-      fixture: "tests/fixtures/r1-qualified-contract.json",
-      provenance: frozenContract.provenance,
-    },
     deploymentIdentity: "NOT_USED",
-    checks: {
-      canonicalPackageValidation: "PASS",
-      parserContractFixtures: "PASS",
-      pinnedIndependentUpstreamValidation: "PASS",
-      validatorRegressionTests: "PASS",
-      generation: "PASS",
-      freshness: "PASS",
-      deterministicGeneration: "PASS",
-      frozenContract: "PASS",
-      canonicalProjectionConformance: "PASS",
-      workerProtocolTests: "PASS",
-      malformedAndResourceBoundaryTests: "PASS",
-      wranglerBuildDryRun: "PASS",
-    },
+    checks,
   };
+  if (historicalR1ArtifactIdentity) {
+    report.historicalR1ArtifactIdentity = historicalR1ArtifactIdentity;
+  }
 
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}
