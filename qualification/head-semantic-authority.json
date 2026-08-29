@@ -1,6 +1,18 @@
 {
   "schemaVersion": 1,
   "baselineCanonicalSkillTree": "4395ef86a309ed610f4860f47284d0e4da572914",
+  "baselineCanonicalPackageTrees": {
+    "architect": "35d8b94aba95ec96c7934e652f11726a55a056d4",
+    "blast-radius": "b6d7a3083ff661ed9998fa91a52341684b885d81",
+    "figure-it-out": "649ba6f35faa1b438d3ab6caf1f9b30aaf62359a",
+    "fix-root-causes": "3fb27c7f5e4285e32e7b522e72480e5768c18028",
+    "how": "3252b4638627a8012260176d8996798f729399fb",
+    "interrogate": "a3180549d3eb8aa20f12a6a304abb27f85c9f6f7",
+    "prove-it-works": "e3777d3f2cc5224c9c683e6947401d3501c1167a",
+    "sequence-verifiable-units": "e77ea3c9ac06fd02403586c75eae26f89eb2a4e9",
+    "show-me-your-work": "2da9a8d0097080ef1e907f13390596e51e01a078",
+    "why": "29055f8e7084a4337f47e286d7af0141d58a764a"
+  },
   "admittedCanonicalPackages": [
     "architect"
   ]
