@@ -1,41 +1,62 @@
 # Design-space gate
 
-Use this before committing to a consequential architecture or introducing a new mechanism.
+Use these prompts before a consequential architectural commitment when they help reduce material uncertainty.
 
-## 1. Subtract before adding
+This resource is not a mandatory sequence or exhaustive checklist. It imposes no required number of alternatives, passes, or prototypes. Use the shortest set of prompts that is sufficient for the actual decision, and replace them with a better technique when one is more informative.
 
-Ask whether deletion, consolidation, or reuse of an existing owner solves the requirement. New abstraction is not the default just because implementation is cheap.
+## Hard boundary
 
-## 2. Redesign from the foundational assumption
+Do not silently introduce a new source of authority, persistent/shared state, write surface, model-call boundary, service, connector, or generic proxy merely because it is easy to implement. If the design needs one, make the new boundary explicit, explain the invariant it serves, and keep it within task/session authorization.
 
-If the new requirement changes a core assumption, sketch the system as if that requirement had existed on day one. Compare that shape with an incremental patch. Repeated optional fields, pass-through flags, special cases, or duplicated policy are evidence the old abstraction no longer matches the domain.
+Do not claim that an alternative was ruled out unless an observable constraint, tradeoff, or experiment actually supports that conclusion. Preserve any correctness-critical prerequisite ordering for migration, destructive transition, authority, or artifact identity.
 
-## 3. Compare structurally different options
+## Heuristics
 
-When several viable shapes exist, compare at least two. For genuinely novel or empirical forks, use two or three concrete sketches/prototypes rather than arguing from taste. A renamed version of the same dependency graph is not a second design.
+### Subtract or reuse before adding
 
-Evaluate:
+Ask whether deletion, consolidation, or reuse of an existing owner solves the requirement. A new abstraction is not the default merely because implementation is cheap.
 
-- number of authorities/sources of truth;
-- mutable/shared state introduced;
-- dependency direction and boundary clarity;
-- caller complexity and hidden coordination;
-- migration/deletion path;
-- verification path and failure observability;
-- operational cost and irreversible commitments.
+### Revisit the foundational assumption
 
-## 4. Build the lever when repetition appears
+When a new requirement changes a core assumption, consider what the system would look like if that requirement had existed from the beginning. Compare that perspective with an incremental repair when doing so exposes ownership or abstraction mismatch.
 
-If the design requires repeated manual edits or repeated reasoning, first ask whether a script, generator, schema, validator, codemod, or registry can encode the rule once. The reusable mechanism should itself be inspectable and verifiable.
+Repeated optional fields, pass-through flags, special cases, duplicated policy, or compensating coordination are signals that the current abstraction may no longer match the domain. They are evidence to investigate, not automatic proof that a rewrite is required.
 
-## 5. Capability admission for tool/plugin architecture
+### Keep the design space open while uncertainty is material
 
-Before adding a new tool, service, state store, or connector:
+When several materially different shapes remain viable and the choice is consequential, compare the ones needed to resolve the uncertainty. Do not manufacture nominal alternatives, and do not stop or continue merely to satisfy a numeric count.
 
-1. Can an existing host capability own the operation without proxying it through this system?
-2. Can an existing workflow owner absorb the procedure as a resource/playbook rather than adding another routing surface?
-3. Is the new capability a distinct user intent, or just an implementation detail of an existing owner?
-4. Can the requirement stay stateless/read-only until evidence proves persistence or writes are necessary?
-5. Can generated projection replace duplicated hand-maintained configuration/content?
+Prefer concrete sketches or small prototypes for empirical forks when they can cheaply reveal the deciding fact.
 
-Choose the smallest architecture that satisfies the real invariant. Record the serious rejected alternatives and the observation that ruled them out.
+### Encode repetition only when it reduces net complexity
+
+If a design would require repeated manual edits or repeated application of the same rule, consider whether a script, generator, schema, validator, codemod, or registry can encode it once. The reusable mechanism should itself be inspectable and verifiable, and it should not create a second authority for semantics already owned elsewhere.
+
+## Optional evaluation dimensions
+
+Use whichever dimensions are material to the decision:
+
+- number and clarity of authorities/sources of truth;
+- mutable/shared state and hidden coordination;
+- ownership and dependency direction;
+- caller/API complexity and boundary validation;
+- failure semantics and observability;
+- persistence, retry, concurrency, and ordering;
+- compatibility, migration, deletion, and rollback path;
+- downstream blast radius and operational cost;
+- verification path and irreversible commitments.
+
+These dimensions help compare designs; they are not a required traversal order.
+
+## Optional capability-admission prompts
+
+For a proposed tool, service, state store, connector, or other capability, ask whichever questions are relevant:
+
+- Can an existing host capability own the operation without proxying it through this system?
+- Can an existing workflow owner absorb the procedure as a resource/playbook instead of adding another routing surface?
+- Is the capability a distinct user intent, or only an implementation detail of an existing owner?
+- Can the requirement remain stateless or read-only until evidence shows persistence or writes are necessary?
+- Can generated projection replace duplicated hand-maintained configuration or content?
+- What observation would justify the new authority and what verification would detect misuse or drift?
+
+Choose the architecture that best preserves the governing invariant with acceptable complexity and an observable verification path. Record rejected serious alternatives only when they were materially relevant to the decision.
