@@ -17,7 +17,7 @@ Native Skill qualification uses only product-visible behavior available to an or
 
 ## Remote MCP path
 
-The same eight workflows are projected as read-only MCP tools by the stateless Cloudflare Worker built from this repository. The Worker is reachable without a local PC or tunnel.
+The canonical Skill workflows are projected as read-only MCP tools into the generated MCP catalog by the stateless Cloudflare Worker built from this repository. The Worker is reachable without a local PC or tunnel.
 
 After Cloudflare deployment, connect ChatGPT to the exact URL shown by Cloudflare:
 
