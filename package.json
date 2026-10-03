@@ -15,7 +15,7 @@
     "check": "npm run qualify:head-authority && npm run qualify:r1 && npm run qualify:r4-lab"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/server": "2.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
